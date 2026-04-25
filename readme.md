@@ -2,6 +2,8 @@
 
 A local-first flashcard app backed by a single Markdown file, `cards.md`. A small Node.js server validates and rewrites that file, serves a plain HTML/CSS/JS study interface, and keeps backups and logs on disk.
 
+![](/assets/app-screenshot.png)
+
 ## What the app does
 
 - stores flashcards in `cards.md`
