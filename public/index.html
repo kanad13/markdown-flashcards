@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Local Markdown Flashcards</title>
+	<link rel="stylesheet" href="/styles.css" />
+	<script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js" defer></script>
+	<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js" defer></script>
+	<script src="/app.js" defer></script>
+</head>
+
+<body>
+	<main class="app-shell">
+		<section class="panel session-shell" id="session-shell">
+			<div class="session-shell-controls" id="session-shell-controls">
+				<button type="button" class="secondary-button shell-toggle" id="overview-toggle-button" aria-pressed="true">Hide
+					guide</button>
+				<button type="button" class="secondary-button shell-toggle" id="session-toggle-button" aria-pressed="false">Show
+					session info</button>
+			</div>
+
+			<div class="session-shell-body is-hidden" id="session-shell-body">
+				<div class="detail-strip-group">
+					<p class="detail-strip-name">Session info</p>
+					<dl class="metadata-strip" id="session-info-strip">
+						<div class="meta-chip meta-chip-progress">
+							<dt>Progress</dt>
+							<dd id="progress-text" aria-live="polite">Loading session…</dd>
+						</div>
+						<div class="meta-chip">
+							<dt>File</dt>
+							<dd id="session-source-file">cards.md</dd>
+						</div>
+						<div class="meta-chip">
+							<dt>Order</dt>
+							<dd id="stack-mode">Loading…</dd>
+						</div>
+						<div class="meta-chip">
+							<dt>Filter</dt>
+							<dd id="difficulty-filter">—</dd>
+						</div>
+						<div class="meta-chip">
+							<dt>Eligible</dt>
+							<dd id="eligible-count">—</dd>
+						</div>
+						<div class="meta-chip">
+							<dt>Reviewed today</dt>
+							<dd id="reviewed-today">0</dd>
+						</div>
+					</dl>
+				</div>
+
+				<div class="detail-strip-group">
+					<p class="detail-strip-name">Current card</p>
+					<dl class="metadata-strip" id="current-card-strip">
+						<div class="meta-chip">
+							<dt>Card</dt>
+							<dd id="card-id">—</dd>
+						</div>
+						<div class="meta-chip">
+							<dt>Last reviewed</dt>
+							<dd id="last-reviewed">—</dd>
+						</div>
+					</dl>
+				</div>
+
+				<p class="status-line" id="status-message" aria-live="polite">Connecting to your study stack…</p>
+			</div>
+
+			<p class="error-banner is-hidden" id="error-message" role="alert"></p>
+		</section>
+
+		<section class="panel overview-panel" id="overview-panel" aria-labelledby="overview-title">
+			<div class="overview-hero">
+				<div class="overview-copy">
+					<p class="eyebrow">Guide / start page</p>
+					<h1 id="overview-title">Check the guide, then start studying</h1>
+					<p class="lede">
+						This guide shows the active file, the session filters in effect, and the quickest way to use,
+						start, and stop the app before you switch into a more compact study-focused layout.
+					</p>
+				</div>
+				<div class="overview-callout">
+					<p class="overview-note">You can reopen this guide later from the compact top bar.</p>
+					<button type="button" class="primary-button" id="start-study-button">Start studying</button>
+				</div>
+			</div>
+
+			<div class="overview-grid">
+				<article class="info-card">
+					<h2>Current session</h2>
+					<dl class="overview-facts">
+						<div>
+							<dt>Data file</dt>
+							<dd id="overview-source-file">cards.md</dd>
+						</div>
+						<div>
+							<dt>Difficulty filter</dt>
+							<dd id="overview-difficulty-filter">Loading…</dd>
+						</div>
+						<div>
+							<dt>Order</dt>
+							<dd id="overview-stack-mode">Loading…</dd>
+						</div>
+						<div>
+							<dt>Eligible cards</dt>
+							<dd id="overview-eligible-count">—</dd>
+						</div>
+						<div>
+							<dt>Reviewed today</dt>
+							<dd id="overview-reviewed-today">—</dd>
+						</div>
+					</dl>
+				</article>
+
+				<article class="info-card">
+					<h2>How to use it</h2>
+					<ol class="guide-list">
+						<li>Use <strong>Start studying</strong> to enter the compact reader-first layout.</li>
+						<li><strong>Reveal answer</strong> shows the back, and <strong>Hide answer</strong> conceals it again.</li>
+						<li>Changing <strong>Difficulty</strong> saves immediately to <code>cards.md</code>.</li>
+						<li>Only <strong>Mark as Reviewed</strong> changes <code>last_reviewed</code>.</li>
+						<li><strong>Previous</strong> and <strong>Next</strong> only navigate the current session stack.</li>
+					</ol>
+				</article>
+
+				<article class="info-card">
+					<h2>Start / stop</h2>
+					<ul class="guide-list command-list">
+						<li><code>npm start</code> runs the app normally.</li>
+						<li><code>npm run dev</code> runs the app with watch mode.</li>
+						<li>Press <code>Ctrl+C</code> in the terminal to stop the app.</li>
+						<li><code>.bak/</code> stores startup backups and <code>logs/</code> stores run logs.</li>
+					</ul>
+				</article>
+			</div>
+		</section>
+
+		<section class="study-layout is-hidden" id="study-layout">
+			<section class="panel study-panel" aria-label="Flashcard study area">
+				<div class="study-toolbar" id="study-toolbar">
+					<div class="navigation-group" id="navigation-group">
+						<button type="button" class="secondary-button segmented-button" id="previous-button">Previous</button>
+						<button type="button" class="secondary-button segmented-button" id="next-button">Next</button>
+					</div>
+					<span class="chip toolbar-chip" id="card-side-label">Front</span>
+					<label class="toolbar-field" id="difficulty-field" for="difficulty-select">
+						<span class="toolbar-field-label">Difficulty</span>
+						<select id="difficulty-select" name="difficulty"></select>
+					</label>
+					<button type="button" class="secondary-button toolbar-button" id="reveal-button">Reveal answer</button>
+					<button type="button" class="primary-button toolbar-button" id="review-button">Mark as Reviewed</button>
+				</div>
+
+				<div class="empty-state is-hidden" id="empty-state">
+					<h2>No cards in this session</h2>
+					<p>
+						The current <code>filter_difficulty</code> and <code>paused</code> settings left nothing to study.
+						Adjust <code>cards.md</code> and refresh when you are ready.
+					</p>
+				</div>
+
+				<section class="face-panel" id="front-panel">
+					<div class="face-heading-row">
+						<h2>Front</h2>
+					</div>
+					<div class="markdown-body" id="front-content"></div>
+				</section>
+
+				<section class="face-panel" id="back-panel" hidden>
+					<div class="face-heading-row">
+						<h2>Back</h2>
+					</div>
+					<div class="markdown-body" id="back-content"></div>
+				</section>
+			</section>
+		</section>
+	</main>
+</body>
+
+</html>
