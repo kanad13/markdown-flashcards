@@ -161,8 +161,20 @@ async function startServer({
 		repositoryState,
 	});
 
-	return new Promise((resolve) => {
-		const server = app.listen(port, () => {
+	return new Promise((resolve, reject) => {
+		const server = app.listen(port);
+
+		function handleListenError(error) {
+			if (error && error.code === "EADDRINUSE") {
+				error.message = `Port ${port} is already in use. Another flashcard server may already be running at http://localhost:${port}. Run \`pid=$(lsof -tiTCP:${port} -sTCP:LISTEN); [[ -n "$pid" ]] && kill "$pid" || echo "No server is listening on port ${port}."\` to stop the current server safely, or set PORT to a different value.`;
+			}
+
+			reject(error);
+		}
+
+		server.once("error", handleListenError);
+		server.once("listening", () => {
+			server.off("error", handleListenError);
 			const address = server.address();
 			const actualPort =
 				typeof address === "object" && address ? address.port : port;

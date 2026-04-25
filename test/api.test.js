@@ -64,6 +64,84 @@ async function startTestServer(t, { cardsSource, shuffleRandom } = {}) {
 	};
 }
 
+test("startServer rejects with a helpful message when the requested port is already in use", async (t) => {
+	const source = [
+		"```yaml",
+		"shuffle: no",
+		"```",
+		"",
+		"<!-- card -->",
+		"",
+		"## Front",
+		"",
+		"Question",
+		"",
+		"## Back",
+		"",
+		"Answer",
+		"",
+		"<!-- /card -->",
+		"",
+	].join("\n");
+
+	const firstRootDir = await createTempWorkspace(t);
+	await fs.writeFile(path.join(firstRootDir, "cards.md"), source, "utf8");
+
+	const started = await startServer({
+		rootDir: firstRootDir,
+		now: fixedNow,
+		port: 0,
+		quiet: true,
+	});
+
+	t.after(async () => {
+		await new Promise((resolve, reject) => {
+			started.server.close((error) => {
+				if (error) {
+					reject(error);
+					return;
+				}
+
+				resolve();
+			});
+		});
+	});
+
+	const address = started.server.address();
+	const port = typeof address === "object" && address ? address.port : 0;
+
+	const secondRootDir = await createTempWorkspace(t);
+	await fs.writeFile(path.join(secondRootDir, "cards.md"), source, "utf8");
+
+	await assert.rejects(
+		() =>
+			startServer({
+				rootDir: secondRootDir,
+				now: fixedNow,
+				port,
+				quiet: true,
+			}),
+		(error) => {
+			assert.equal(error.code, "EADDRINUSE");
+			assert.match(
+				error.message,
+				new RegExp(`Port ${port} is already in use\\.`),
+			);
+			assert.match(error.message, new RegExp(`http://localhost:${port}`));
+			assert.match(
+				error.message,
+				new RegExp(`pid=\\$\\(lsof -tiTCP:${port} -sTCP:LISTEN\\)`),
+			);
+			assert.match(error.message, /\[\[ -n "\$pid" \]\] && kill "\$pid"/);
+			assert.match(
+				error.message,
+				new RegExp(`No server is listening on port ${port}\\.`),
+			);
+			return true;
+		},
+	);
+});
+
 test("GET /api/session returns the current filtered session stack and reviewed counter", async (t) => {
 	const source = [
 		"```yaml",
