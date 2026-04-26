@@ -1,3 +1,0 @@
-[2026-04-25T09:33:09.174Z] INFO startup.begin file=cards.md
-[2026-04-25T09:33:09.175Z] INFO backup.created file=.bak/2026-04-25T09-33-09-cards.md.bak
-[2026-04-25T09:33:09.177Z] INFO startup.ready file=cards.md card_count=3 updated=0
