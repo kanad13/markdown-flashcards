@@ -145,7 +145,7 @@ test("startServer rejects with a helpful message when the requested port is alre
 test("GET /api/session returns the current filtered session stack and reviewed counter", async (t) => {
 	const source = [
 		"```yaml",
-		"filter_difficulty: [3, 8]",
+		"filter_difficulty: [2, 4]",
 		"shuffle: yes",
 		"```",
 		"",
@@ -153,7 +153,7 @@ test("GET /api/session returns the current filtered session stack and reviewed c
 		"",
 		"```yaml",
 		"id: alpha111",
-		"difficulty: 3",
+		"difficulty: 2",
 		"last_reviewed: 2026-04-26",
 		"paused: no",
 		"```",
@@ -172,7 +172,7 @@ test("GET /api/session returns the current filtered session stack and reviewed c
 		"",
 		"```yaml",
 		"id: beta2222",
-		"difficulty: 6",
+		"difficulty: 3",
 		"last_reviewed: 2026-04-26",
 		"paused: no",
 		"```",
@@ -191,7 +191,7 @@ test("GET /api/session returns the current filtered session stack and reviewed c
 		"",
 		"```yaml",
 		"id: gamma333",
-		"difficulty: 8",
+		"difficulty: 4",
 		"last_reviewed: 2026-04-20",
 		"paused: no",
 		"```",
@@ -210,7 +210,7 @@ test("GET /api/session returns the current filtered session stack and reviewed c
 		"",
 		"```yaml",
 		"id: delta444",
-		"difficulty: 8",
+		"difficulty: 4",
 		"last_reviewed: 2026-04-10",
 		"paused: yes",
 		"```",
@@ -283,26 +283,26 @@ test("PATCH /api/cards/:cardId/difficulty updates the card and rewrites cards.md
 		headers: {
 			"content-type": "application/json",
 		},
-		body: JSON.stringify({ difficulty: 9 }),
+		body: JSON.stringify({ difficulty: 5 }),
 	});
 	const payload = await response.json();
 
 	assert.equal(response.status, 200);
 	assert.equal(payload.card.id, "alpha111");
-	assert.equal(payload.card.difficulty, 9);
+	assert.equal(payload.card.difficulty, 5);
 
 	const expectedModel = parseCardsFile(source);
-	expectedModel.cards[0].metadata.difficulty = 9;
+	expectedModel.cards[0].metadata.difficulty = 5;
 
 	const rewritten = await fs.readFile(path.join(rootDir, "cards.md"), "utf8");
 	assert.equal(rewritten, serializeCardsFile(expectedModel));
 
 	const reparsed = parseCardsFile(rewritten);
-	assert.equal(reparsed.cards[0].metadata.difficulty, 9);
+	assert.equal(reparsed.cards[0].metadata.difficulty, 5);
 	assert.equal(reparsed.cards[0].metadata.unknown_field, "keep-me");
 });
 
-test("POST /api/cards/:cardId/review updates last_reviewed and the reviewed counter", async (t) => {
+test("PATCH /api/cards/:cardId/review updates last_reviewed and the reviewed counter", async (t) => {
 	const source = [
 		"```yaml",
 		"shuffle: no",
@@ -353,7 +353,7 @@ test("POST /api/cards/:cardId/review updates last_reviewed and the reviewed coun
 	});
 
 	const response = await fetch(`${baseUrl}/api/cards/alpha111/review`, {
-		method: "POST",
+		method: "PATCH",
 	});
 	const payload = await response.json();
 
@@ -371,4 +371,59 @@ test("POST /api/cards/:cardId/review updates last_reviewed and the reviewed coun
 	const sessionPayload = await sessionResponse.json();
 	assert.equal(sessionPayload.session.reviewed_today, 1);
 	assert.equal(sessionPayload.cards[0].last_reviewed, "2026-04-26");
+});
+
+test("PATCH /api/cards/:cardId/review with reviewed false restores the previous review date", async (t) => {
+	const source = [
+		"```yaml",
+		"shuffle: no",
+		"```",
+		"",
+		"<!-- card -->",
+		"",
+		"```yaml",
+		"id: alpha111",
+		"difficulty: 3",
+		"last_reviewed: 2026-04-20",
+		"paused: no",
+		"```",
+		"",
+		"## Front",
+		"",
+		"Alpha front",
+		"",
+		"## Back",
+		"",
+		"Alpha back",
+		"",
+		"<!-- /card -->",
+		"",
+	].join("\n");
+
+	const { baseUrl, rootDir } = await startTestServer(t, {
+		cardsSource: source,
+	});
+
+	await fetch(`${baseUrl}/api/cards/alpha111/review`, {
+		method: "PATCH",
+	});
+
+	const response = await fetch(`${baseUrl}/api/cards/alpha111/review`, {
+		method: "PATCH",
+		headers: {
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({
+			reviewed: false,
+			restore_last_reviewed: "2026-04-20",
+		}),
+	});
+	const payload = await response.json();
+
+	assert.equal(response.status, 200);
+	assert.equal(payload.card.last_reviewed, "2026-04-20");
+	assert.equal(payload.session.reviewed_today, 0);
+
+	const rewritten = await fs.readFile(path.join(rootDir, "cards.md"), "utf8");
+	assert.equal(rewritten, source);
 });

@@ -46,14 +46,14 @@ test("round-trips unchanged valid files and preserves unknown YAML fields on rew
 	assert.equal(serializeCardsFile(parsed), source);
 
 	parsed.frontmatter.shuffle = "no";
-	parsed.cards[0].metadata.difficulty = 7;
+	parsed.cards[0].metadata.difficulty = 5;
 
 	const reparsed = parseCardsFile(serializeCardsFile(parsed));
 	assert.equal(reparsed.frontmatter.custom_setting, "keep-me");
 	assert.equal(reparsed.frontmatter.shuffle, "no");
 	assert.equal(reparsed.cards[0].metadata.note, "keep me");
 	assert.deepEqual(reparsed.cards[0].metadata.tags, ["alpha", "beta"]);
-	assert.equal(reparsed.cards[0].metadata.difficulty, 7);
+	assert.equal(reparsed.cards[0].metadata.difficulty, 5);
 });
 
 for (const [filename, expectedMessage] of [

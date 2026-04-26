@@ -1,6 +1,11 @@
 const fs = require("node:fs/promises");
 
 const { parseCardsFile, serializeCardsFile } = require("./cards-file");
+const {
+	DIFFICULTY_MAX,
+	DIFFICULTY_MIN,
+	isCurrentDifficulty,
+} = require("./difficulty-scale");
 const { formatCalendarDate } = require("./startup");
 
 class SessionStateError extends Error {
@@ -93,8 +98,16 @@ function updateCardDifficulty(model, cardId, difficulty) {
 }
 
 function markCardReviewed(model, cardId, { now = () => new Date() } = {}) {
+	return setCardLastReviewed(
+		model,
+		cardId,
+		formatCalendarDate(now()),
+	);
+}
+
+function setCardLastReviewed(model, cardId, lastReviewed) {
+	validateCalendarDate(lastReviewed);
 	const { card, cardIndex } = getCardById(model, cardId);
-	const lastReviewed = formatCalendarDate(now());
 
 	const nextCard = {
 		...card,
@@ -158,11 +171,26 @@ function replaceCard(model, cardIndex, nextCard) {
 }
 
 function validateDifficulty(difficulty) {
-	if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 10) {
+	if (!isCurrentDifficulty(difficulty)) {
 		throw new SessionStateError(
-			"difficulty must be an integer between 1 and 10.",
+			`difficulty must be an integer between ${DIFFICULTY_MIN} and ${DIFFICULTY_MAX}.`,
 			{
 				code: "INVALID_DIFFICULTY",
+				statusCode: 400,
+			},
+		);
+	}
+}
+
+function validateCalendarDate(lastReviewed) {
+	if (
+		typeof lastReviewed !== "string" ||
+		!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(lastReviewed)
+	) {
+		throw new SessionStateError(
+			"last_reviewed must be a YYYY-MM-DD date string.",
+			{
+				code: "INVALID_LAST_REVIEWED",
 				statusCode: 400,
 			},
 		);
@@ -174,9 +202,13 @@ function normalizeDifficultyFilter(filterDifficulty) {
 		return null;
 	}
 
-	return filterDifficulty
+	const normalized = filterDifficulty
 		.map((value) => Number(value))
-		.filter((value) => Number.isInteger(value));
+		.filter((value, index, values) => {
+			return isCurrentDifficulty(value) && values.indexOf(value) === index;
+		});
+
+	return normalized.length > 0 ? normalized : null;
 }
 
 function matchesDifficulty(card, filterDifficulty) {
@@ -212,6 +244,7 @@ module.exports = {
 	getCardById,
 	getSessionCards,
 	markCardReviewed,
+	setCardLastReviewed,
 	toApiCard,
 	updateCardDifficulty,
 	writeCardsModel,

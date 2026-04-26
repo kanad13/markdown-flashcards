@@ -16,6 +16,9 @@
 		}),
 	});
 
+	const DIFFICULTY_VALUES = Object.freeze([1, 2, 3, 4, 5]);
+	const DEFAULT_DIFFICULTY = 3;
+
 	const API_ROUTES = {
 		session: "/api/session",
 		difficulty(cardId) {
@@ -54,6 +57,7 @@
 		return {
 			cards,
 			session: normalizeSession(payload.session, cards.length),
+			reviewUndoDates: {},
 			currentIndex: cards.length > 0 ? 0 : -1,
 			isBackVisible: false,
 			isOverviewVisible: true,
@@ -97,10 +101,6 @@
 			: UI_LABELS.sessionInfoToggle.show;
 	}
 
-	function formatCardSideLabel(isBackVisible) {
-		return isBackVisible ? "Front + Back" : "Front";
-	}
-
 	function getCurrentCard(state) {
 		if (
 			!state ||
@@ -111,6 +111,30 @@
 		}
 
 		return state.cards[state.currentIndex];
+	}
+
+	function formatCurrentCardLabel(
+		session,
+		currentIndex,
+		fallbackLabel = "No cards in session",
+	) {
+		const totalCards = Number.isInteger(session?.total_cards)
+			? session.total_cards
+			: 0;
+
+		if (totalCards <= 0 || currentIndex < 0) {
+			return fallbackLabel;
+		}
+
+		return `Card ${Math.min(currentIndex + 1, totalCards)} of ${totalCards}`;
+	}
+
+	function getTodayKey(date = new Date()) {
+		return date.toISOString().slice(0, 10);
+	}
+
+	function isCardReviewedToday(card, todayKey = getTodayKey()) {
+		return Boolean(card && card.last_reviewed === todayKey);
 	}
 
 	function formatProgressText(session, currentIndex) {
@@ -134,15 +158,238 @@
 		return filterDifficulty.join(", ");
 	}
 
+	function canUndoReview(state, card = getCurrentCard(state)) {
+		return Boolean(
+			card &&
+				state?.reviewUndoDates &&
+				Object.prototype.hasOwnProperty.call(state.reviewUndoDates, card.id),
+		);
+	}
+
 	function buildDifficultyOptions(selectedDifficulty) {
-		return Array.from({ length: 10 }, (_, index) => {
-			const value = index + 1;
+		return DIFFICULTY_VALUES.map((value) => {
 			return {
 				value,
 				label: String(value),
 				selected: value === Number(selectedDifficulty),
 			};
 		});
+	}
+
+	function getSessionProgress(session, currentIndex) {
+		const totalCards = Number.isInteger(session?.total_cards)
+			? session.total_cards
+			: 0;
+		const value =
+			totalCards > 0 && currentIndex >= 0
+				? Math.min(currentIndex + 1, totalCards)
+				: 0;
+
+		return {
+			max: Math.max(totalCards, 1),
+			value,
+		};
+	}
+
+	function getNextReviewMutation(state, todayKey = getTodayKey()) {
+		const currentCard = getCurrentCard(state);
+		if (!currentCard) {
+			return null;
+		}
+
+		if (!isCardReviewedToday(currentCard, todayKey)) {
+			return { reviewed: true };
+		}
+
+		if (!canUndoReview(state, currentCard)) {
+			return null;
+		}
+
+		return {
+			reviewed: false,
+			restoreLastReviewed: state.reviewUndoDates[currentCard.id],
+		};
+	}
+
+	function getReviewButtonState(state, todayKey = getTodayKey()) {
+		const currentCard = getCurrentCard(state);
+		if (!currentCard) {
+			return {
+				label: "Mark as Reviewed",
+				title: "No card selected",
+				disabled: true,
+				reviewed: false,
+				undoable: false,
+			};
+		}
+
+		const reviewed = isCardReviewedToday(currentCard, todayKey);
+		const undoable = canUndoReview(state, currentCard);
+
+		if (state.busyAction === "review") {
+			return {
+				label: "Saving…",
+				title:
+					reviewed && undoable
+						? "Unmark reviewed (R)"
+						: "Mark as reviewed (R)",
+				disabled: true,
+				reviewed,
+				undoable,
+			};
+		}
+
+		if (!reviewed) {
+			return {
+				label: "Mark as Reviewed",
+				title: "Mark as reviewed (R)",
+				disabled: false,
+				reviewed: false,
+				undoable: false,
+			};
+		}
+
+		if (undoable) {
+			return {
+				label: "Reviewed today",
+				title: "Unmark reviewed (R)",
+				disabled: false,
+				reviewed: true,
+				undoable: true,
+			};
+		}
+
+		return {
+			label: "Reviewed today",
+			title: "Already reviewed today before this session",
+			disabled: true,
+			reviewed: true,
+			undoable: false,
+		};
+	}
+
+	function normalizeShortcutKey(event) {
+		if (!event) {
+			return "";
+		}
+
+		if (
+			event.code === "Space" ||
+			event.key === " " ||
+			event.key === "Spacebar"
+		) {
+			return "Space";
+		}
+
+		return typeof event.key === "string" ? event.key : "";
+	}
+
+	function hasShortcutModifier(event) {
+		return Boolean(
+			event?.altKey || event?.ctrlKey || event?.metaKey || event?.shiftKey,
+		);
+	}
+
+	function isTextInputTarget(target) {
+		if (!target || typeof target !== "object") {
+			return false;
+		}
+
+		if (
+			typeof target.closest === "function" &&
+			target.closest("input, select, textarea, [contenteditable='true']")
+		) {
+			return true;
+		}
+
+		const tagName =
+			typeof target.tagName === "string" ? target.tagName.toUpperCase() : "";
+
+		return (
+			target.isContentEditable === true ||
+			tagName === "INPUT" ||
+			tagName === "SELECT" ||
+			tagName === "TEXTAREA"
+		);
+	}
+
+	function isKeyboardTriggerTarget(target) {
+		if (!target || typeof target !== "object") {
+			return false;
+		}
+
+		if (typeof target.closest === "function" && target.closest("button, a")) {
+			return true;
+		}
+
+		const tagName =
+			typeof target.tagName === "string" ? target.tagName.toUpperCase() : "";
+
+		return tagName === "BUTTON" || tagName === "A";
+	}
+
+	function resolveKeyboardShortcut(event, state) {
+		const currentCard = getCurrentCard(state);
+		if (
+			!currentCard ||
+			state?.isOverviewVisible ||
+			hasShortcutModifier(event)
+		) {
+			return null;
+		}
+
+		const key = normalizeShortcutKey(event);
+
+		if (isTextInputTarget(event?.target)) {
+			return null;
+		}
+
+		if (
+			(key === "Enter" || key === "Space") &&
+			isKeyboardTriggerTarget(event?.target)
+		) {
+			return null;
+		}
+
+		if (key === "ArrowLeft") {
+			return state.busyAction === null && state.currentIndex > 0
+				? { type: "previous" }
+				: null;
+		}
+
+		if (key === "ArrowRight") {
+			return state.busyAction === null &&
+				state.currentIndex < state.cards.length - 1
+				? { type: "next" }
+				: null;
+		}
+
+		if (DIFFICULTY_VALUES.includes(Number(key))) {
+			return state.busyAction === null
+				? {
+						type: "difficulty",
+						value: Number(key),
+					}
+				: null;
+		}
+
+		if (typeof key === "string" && key.toLowerCase() === "r") {
+			return state.busyAction === null && getNextReviewMutation(state)
+				? { type: "reviewToggle" }
+				: null;
+		}
+
+		if (key !== "Enter" && key !== "Space") {
+			return null;
+		}
+
+		return { type: "toggleReveal" };
+	}
+
+	function removeObjectKey(input, key) {
+		const next = { ...input };
+		delete next[key];
+		return next;
 	}
 
 	function moveIndex(currentIndex, delta, totalCards) {
@@ -185,10 +432,10 @@
 
 	function collectElements(document) {
 		return {
+			answerDivider: document.getElementById("answer-divider"),
 			backContent: document.getElementById("back-content"),
 			backPanel: document.getElementById("back-panel"),
-			cardId: document.getElementById("card-id"),
-			cardSideLabel: document.getElementById("card-side-label"),
+			currentCardText: document.getElementById("current-card-text"),
 			difficultyFilter: document.getElementById("difficulty-filter"),
 			difficultySelect: document.getElementById("difficulty-select"),
 			eligibleCount: document.getElementById("eligible-count"),
@@ -196,7 +443,6 @@
 			errorMessage: document.getElementById("error-message"),
 			frontContent: document.getElementById("front-content"),
 			frontPanel: document.getElementById("front-panel"),
-			lastReviewed: document.getElementById("last-reviewed"),
 			nextButton: document.getElementById("next-button"),
 			overviewDifficultyFilter: document.getElementById(
 				"overview-difficulty-filter",
@@ -208,10 +454,10 @@
 			overviewStackMode: document.getElementById("overview-stack-mode"),
 			overviewToggleButton: document.getElementById("overview-toggle-button"),
 			previousButton: document.getElementById("previous-button"),
-			progressText: document.getElementById("progress-text"),
 			revealButton: document.getElementById("reveal-button"),
 			reviewButton: document.getElementById("review-button"),
 			reviewedToday: document.getElementById("reviewed-today"),
+			sessionProgress: document.getElementById("session-progress"),
 			sessionShellBody: document.getElementById("session-shell-body"),
 			sessionSourceFile: document.getElementById("session-source-file"),
 			sessionToggleButton: document.getElementById("session-toggle-button"),
@@ -227,11 +473,25 @@
 		const hasCards = Boolean(currentCard);
 		const stackModeLabel = formatStackMode(state.session.shuffle);
 		const filterLabel = formatFilterLabel(state.session.filter_difficulty);
-
-		elements.progressText.textContent = formatProgressText(
+		const progress = getSessionProgress(state.session, state.currentIndex);
+		const isDifficultyDisabled = !hasCards || state.busyAction !== null;
+		const reviewButtonState = getReviewButtonState(state);
+		const currentCardLabel = formatCurrentCardLabel(
 			state.session,
 			state.currentIndex,
+			state.statusMessage === "Loading session…"
+				? "Loading session…"
+				: "No cards in session",
 		);
+
+		elements.currentCardText.textContent = currentCardLabel;
+		elements.sessionProgress.max = progress.max;
+		elements.sessionProgress.value = progress.value;
+		elements.sessionProgress.setAttribute(
+			"aria-valuetext",
+			formatProgressText(state.session, state.currentIndex),
+		);
+		elements.sessionProgress.classList.toggle("is-empty", !hasCards);
 		elements.statusMessage.textContent = state.statusMessage;
 		elements.errorMessage.textContent = state.errorMessage;
 		elements.errorMessage.classList.toggle(
@@ -283,6 +543,7 @@
 		elements.emptyState.classList.toggle("is-hidden", hasCards);
 		elements.frontPanel.hidden = !hasCards;
 		elements.backPanel.hidden = !hasCards || !state.isBackVisible;
+		elements.answerDivider.hidden = !hasCards || !state.isBackVisible;
 
 		elements.previousButton.disabled =
 			!hasCards || state.busyAction !== null || state.currentIndex <= 0;
@@ -291,41 +552,56 @@
 			state.busyAction !== null ||
 			state.currentIndex >= state.cards.length - 1;
 		elements.revealButton.disabled = !hasCards;
-		elements.reviewButton.disabled = !hasCards || state.busyAction !== null;
-		elements.difficultySelect.disabled = !hasCards || state.busyAction !== null;
+		elements.reviewButton.disabled = reviewButtonState.disabled;
 		elements.revealButton.textContent = state.isBackVisible
 			? "Hide answer"
 			: "Reveal answer";
-		elements.reviewButton.textContent =
-			state.busyAction === "review" ? "Saving…" : "Mark as Reviewed";
-		elements.cardSideLabel.textContent = formatCardSideLabel(
-			state.isBackVisible,
+		elements.revealButton.title = state.isBackVisible
+			? "Hide answer (Space or Enter)"
+			: "Reveal answer (Space or Enter)";
+		elements.reviewButton.textContent = reviewButtonState.label;
+		elements.reviewButton.title = reviewButtonState.title;
+		elements.reviewButton.setAttribute(
+			"aria-pressed",
+			String(reviewButtonState.reviewed),
 		);
+		elements.reviewButton.classList.toggle(
+			"is-reviewed",
+			reviewButtonState.reviewed,
+		);
+		elements.reviewButton.classList.toggle(
+			"is-review-locked",
+			reviewButtonState.reviewed && !reviewButtonState.undoable,
+		);
+		elements.difficultySelect.disabled = isDifficultyDisabled;
 
-		if (!hasCards) {
-			elements.cardId.textContent = "—";
-			elements.lastReviewed.textContent = "—";
-			elements.frontContent.innerHTML = "";
-			elements.backContent.innerHTML = "";
-			elements.difficultySelect.innerHTML = buildDifficultyOptions(5)
-				.map(
-					(option) =>
-						`<option value="${option.value}"${option.selected ? " selected" : ""}>${option.label}</option>`,
-				)
-				.join("");
-			return;
+		if (hasCards) {
+			elements.revealButton.setAttribute("aria-keyshortcuts", "Enter Space");
+		} else {
+			elements.revealButton.removeAttribute("aria-keyshortcuts");
 		}
 
-		elements.cardId.textContent = currentCard.id;
-		elements.lastReviewed.textContent = currentCard.last_reviewed;
+		if (hasCards && !reviewButtonState.disabled) {
+			elements.reviewButton.setAttribute("aria-keyshortcuts", "R");
+		} else {
+			elements.reviewButton.removeAttribute("aria-keyshortcuts");
+		}
+
 		elements.difficultySelect.innerHTML = buildDifficultyOptions(
-			currentCard.difficulty,
+			hasCards ? currentCard.difficulty : DEFAULT_DIFFICULTY,
 		)
 			.map(
 				(option) =>
 					`<option value="${option.value}"${option.selected ? " selected" : ""}>${option.label}</option>`,
 			)
 			.join("");
+
+		if (!hasCards) {
+			elements.frontContent.innerHTML = "";
+			elements.backContent.innerHTML = "";
+			return;
+		}
+
 		elements.frontContent.innerHTML = renderMarkdown(currentCard.front, deps);
 		elements.backContent.innerHTML = renderMarkdown(currentCard.back, deps);
 	}
@@ -417,15 +693,7 @@
 			});
 		}
 
-		elements.previousButton.addEventListener("click", () => {
-			selectIndex(moveIndex(state.currentIndex, -1, state.cards.length));
-		});
-
-		elements.nextButton.addEventListener("click", () => {
-			selectIndex(moveIndex(state.currentIndex, 1, state.cards.length));
-		});
-
-		elements.revealButton.addEventListener("click", () => {
+		function toggleBackVisibility() {
 			if (!getCurrentCard(state)) {
 				return;
 			}
@@ -438,15 +706,18 @@
 					? "Back revealed."
 					: "Back hidden. Front content remains visible.",
 			});
-		});
+		}
 
-		elements.difficultySelect.addEventListener("change", async (event) => {
+		async function saveDifficulty(nextDifficulty) {
 			const currentCard = getCurrentCard(state);
-			if (!currentCard) {
+			if (
+				!currentCard ||
+				state.busyAction !== null ||
+				currentCard.difficulty === nextDifficulty
+			) {
 				return;
 			}
 
-			const nextDifficulty = Number(event.target.value);
 			setState({
 				...state,
 				busyAction: "difficulty",
@@ -479,11 +750,13 @@
 					statusMessage: "Difficulty change failed.",
 				});
 			}
-		});
+		}
 
-		elements.reviewButton.addEventListener("click", async () => {
+		async function toggleReviewedCurrentCard() {
 			const currentCard = getCurrentCard(state);
-			if (!currentCard) {
+			const reviewMutation = getNextReviewMutation(state);
+
+			if (!currentCard || !reviewMutation || state.busyAction !== null) {
 				return;
 			}
 
@@ -491,7 +764,9 @@
 				...state,
 				busyAction: "review",
 				errorMessage: "",
-				statusMessage: "Marking this card as reviewed…",
+				statusMessage: reviewMutation.reviewed
+					? "Marking this card as reviewed…"
+					: "Removing this review mark…",
 			});
 
 			try {
@@ -499,13 +774,33 @@
 					deps.fetch,
 					API_ROUTES.review(currentCard.id),
 					{
-						method: "POST",
+						method: "PATCH",
+						headers: {
+							"content-type": "application/json",
+						},
+						body: JSON.stringify(
+							reviewMutation.reviewed
+								? { reviewed: true }
+								: {
+										reviewed: false,
+										restore_last_reviewed:
+											reviewMutation.restoreLastReviewed,
+								  },
+						),
 					},
 				);
 
 				setState({
 					...applyCardUpdate(state, payload),
-					statusMessage: "Marked as reviewed today.",
+					reviewUndoDates: reviewMutation.reviewed
+						? {
+								...state.reviewUndoDates,
+								[currentCard.id]: currentCard.last_reviewed,
+							}
+						: removeObjectKey(state.reviewUndoDates, currentCard.id),
+					statusMessage: reviewMutation.reviewed
+						? "Marked as reviewed today."
+						: "Removed the review mark for today.",
 				});
 			} catch (error) {
 				setState({
@@ -515,6 +810,66 @@
 					statusMessage: "Review update failed.",
 				});
 			}
+		}
+
+		elements.previousButton.addEventListener("click", () => {
+			if (state.busyAction !== null) {
+				return;
+			}
+
+			selectIndex(moveIndex(state.currentIndex, -1, state.cards.length));
+		});
+
+		elements.nextButton.addEventListener("click", () => {
+			if (state.busyAction !== null) {
+				return;
+			}
+
+			selectIndex(moveIndex(state.currentIndex, 1, state.cards.length));
+		});
+
+		elements.revealButton.addEventListener("click", () => {
+			toggleBackVisibility();
+		});
+
+		elements.difficultySelect.addEventListener("change", (event) => {
+			void saveDifficulty(Number(event.target.value));
+		});
+
+		elements.reviewButton.addEventListener("click", () => {
+			void toggleReviewedCurrentCard();
+		});
+
+		deps.document.addEventListener("keydown", (event) => {
+			const action = resolveKeyboardShortcut(event, state);
+
+			if (!action) {
+				return;
+			}
+
+			event.preventDefault();
+
+			if (action.type === "previous") {
+				selectIndex(moveIndex(state.currentIndex, -1, state.cards.length));
+				return;
+			}
+
+			if (action.type === "next") {
+				selectIndex(moveIndex(state.currentIndex, 1, state.cards.length));
+				return;
+			}
+
+			if (action.type === "difficulty") {
+				void saveDifficulty(action.value);
+				return;
+			}
+
+			if (action.type === "reviewToggle") {
+				void toggleReviewedCurrentCard();
+				return;
+			}
+
+			toggleBackVisibility();
 		});
 
 		rerender();
@@ -542,21 +897,34 @@
 	const exported = {
 		APP_INFO,
 		API_ROUTES,
+		DEFAULT_DIFFICULTY,
+		DIFFICULTY_VALUES,
 		UI_LABELS,
 		applyCardUpdate,
 		buildDifficultyOptions,
+		canUndoReview,
 		createInitialState,
-		formatCardSideLabel,
+		formatCurrentCardLabel,
 		formatFilterLabel,
 		formatGuideToggleLabel,
 		formatProgressText,
 		formatSessionToggleLabel,
 		formatStackMode,
 		getCurrentCard,
+		getNextReviewMutation,
+		getReviewButtonState,
+		getSessionProgress,
+		getTodayKey,
+		hasShortcutModifier,
+		isCardReviewedToday,
+		isKeyboardTriggerTarget,
+		isTextInputTarget,
 		moveIndex,
 		normalizeSession,
+		normalizeShortcutKey,
 		renderMarkdown,
 		replaceCard,
+		resolveKeyboardShortcut,
 		setSessionBoxExpanded,
 		setOverviewVisibility,
 	};

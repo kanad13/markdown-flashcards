@@ -9,6 +9,7 @@ const {
 	createSessionState,
 	getCardById,
 	markCardReviewed,
+	setCardLastReviewed,
 	toApiCard,
 	updateCardDifficulty,
 	writeCardsModel,
@@ -79,16 +80,18 @@ function createApp({
 		},
 	);
 
-	app.post("/api/cards/:cardId/review", async (request, response, next) => {
+	async function handleReviewUpdate(request, response, next) {
 		try {
 			const runtimeState = request.app.locals.runtimeState;
-			const nextState = markCardReviewed(
-				runtimeState.model,
-				request.params.cardId,
-				{
-					now: runtimeState.now,
-				},
-			);
+			const nextState = request.body?.reviewed === false
+				? setCardLastReviewed(
+						runtimeState.model,
+						request.params.cardId,
+						request.body?.restore_last_reviewed,
+					)
+				: markCardReviewed(runtimeState.model, request.params.cardId, {
+						now: runtimeState.now,
+					});
 
 			runtimeState.model = await writeCardsModel(
 				runtimeState.cardsFilePath,
@@ -110,7 +113,9 @@ function createApp({
 		} catch (error) {
 			next(error);
 		}
-	});
+	}
+
+	app.patch("/api/cards/:cardId/review", handleReviewUpdate);
 
 	app.use((error, request, response, next) => {
 		if (

@@ -23,11 +23,11 @@ This file is the current work queue derived from `spec.md`. Keep it focused on t
 - [ ] Assert repaired output exactly matches expected rewrites
 - [ ] Keep parser, fixtures, and `spec.md` in sync for any format adjustments
 
-### 3. Decide the next UI slice
+### 3. Validate the new study controls
 
-- [ ] Decide whether Zen mode is worth adding
-- [ ] If a new UI slice is chosen, update `spec.md` before implementation
-- [ ] Keep the current study layout stable until a concrete improvement goal is defined
+- [ ] Smoke test the 1–5 difficulty migration against a larger real deck
+- [ ] Decide whether the compact toolbar needs inline shortcut hints beyond the guide copy
+- [ ] Re-evaluate optional extras like Escape-to-hide or Zen mode only after real usage feedback
 
 ### 4. Increase confidence only if needed
 

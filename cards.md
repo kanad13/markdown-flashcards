@@ -1,5 +1,5 @@
 ```yaml
-filter_difficulty: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+filter_difficulty: [1, 2, 3, 4, 5]
 shuffle: yes
 ```
 
@@ -7,7 +7,7 @@ shuffle: yes
 
 ```yaml
 id: a1b2c3d4
-difficulty: 3
+difficulty: 1
 last_reviewed: 2026-04-20
 paused: no
 ```
@@ -26,7 +26,7 @@ What is the capital of France?
 
 ```yaml
 id: e5f6a7b8
-difficulty: 6
+difficulty: 3
 last_reviewed: 2026-04-18
 paused: no
 ```
@@ -50,7 +50,7 @@ What does the `===` operator check in JavaScript?
 
 ```yaml
 id: c9d0e1f2
-difficulty: 8
+difficulty: 4
 last_reviewed: 2026-04-15
 paused: no
 ```

@@ -192,7 +192,7 @@ test("startup repairs missing managed metadata, preserves unknown fields, and wr
 	const source = [
 		"```yaml",
 		"shuffle: yes",
-		"filter_difficulty: [3, 5, 9]",
+		"filter_difficulty: [3, 5]",
 		"```",
 		"",
 		"<!-- card -->",
@@ -211,7 +211,7 @@ test("startup repairs missing managed metadata, preserves unknown fields, and wr
 		"",
 		"```yaml",
 		"id: deadbeef",
-		"difficulty: 9",
+		"difficulty: 3",
 		"last_reviewed:",
 		"paused:",
 		"extra_field: keep-me",
@@ -266,19 +266,20 @@ test("startup repairs missing managed metadata, preserves unknown fields, and wr
 	);
 	const repaired = parseCardsFile(repairedContents);
 
+	assert.deepEqual(repaired.frontmatter.filter_difficulty, [3, 5]);
 	assert.equal(repaired.cards[0].metadata.id, "11223344");
-	assert.equal(repaired.cards[0].metadata.difficulty, 5);
+	assert.equal(repaired.cards[0].metadata.difficulty, 3);
 	assert.equal(repaired.cards[0].metadata.last_reviewed, "2026-04-26");
 	assert.equal(repaired.cards[0].metadata.paused, "no");
 
 	assert.equal(repaired.cards[1].metadata.id, "deadbeef");
-	assert.equal(repaired.cards[1].metadata.difficulty, 9);
+	assert.equal(repaired.cards[1].metadata.difficulty, 3);
 	assert.equal(repaired.cards[1].metadata.last_reviewed, "2026-04-26");
 	assert.equal(repaired.cards[1].metadata.paused, "no");
 	assert.equal(repaired.cards[1].metadata.extra_field, "keep-me");
 
 	assert.equal(repaired.cards[2].metadata.id, "55667788");
-	assert.equal(repaired.cards[2].metadata.difficulty, 5);
+	assert.equal(repaired.cards[2].metadata.difficulty, 3);
 	assert.equal(repaired.cards[2].metadata.last_reviewed, "2026-04-26");
 	assert.equal(repaired.cards[2].metadata.paused, "no");
 

@@ -22,7 +22,7 @@ test("builds the session stack from filter_difficulty and paused cards without s
 	const model = parseModel(
 		[
 			"```yaml",
-			"filter_difficulty: [3, 8]",
+			"filter_difficulty: [2, 4]",
 			"shuffle: no",
 			"```",
 			"",
@@ -30,7 +30,7 @@ test("builds the session stack from filter_difficulty and paused cards without s
 			"",
 			"```yaml",
 			"id: alpha111",
-			"difficulty: 3",
+			"difficulty: 2",
 			"last_reviewed: 2026-04-20",
 			"paused: no",
 			"```",
@@ -49,7 +49,7 @@ test("builds the session stack from filter_difficulty and paused cards without s
 			"",
 			"```yaml",
 			"id: beta2222",
-			"difficulty: 6",
+			"difficulty: 3",
 			"last_reviewed: 2026-04-21",
 			"paused: no",
 			"```",
@@ -68,7 +68,7 @@ test("builds the session stack from filter_difficulty and paused cards without s
 			"",
 			"```yaml",
 			"id: gamma333",
-			"difficulty: 8",
+			"difficulty: 4",
 			"last_reviewed: 2026-04-22",
 			"paused: yes",
 			"```",
@@ -87,7 +87,7 @@ test("builds the session stack from filter_difficulty and paused cards without s
 			"",
 			"```yaml",
 			"id: delta444",
-			"difficulty: 8",
+			"difficulty: 4",
 			"last_reviewed: 2026-04-23",
 			"paused: no",
 			"```",
@@ -108,7 +108,7 @@ test("builds the session stack from filter_difficulty and paused cards without s
 	const session = createSessionState(model);
 
 	assert.deepEqual(session.card_ids, ["alpha111", "delta444"]);
-	assert.deepEqual(session.filter_difficulty, [3, 8]);
+	assert.deepEqual(session.filter_difficulty, [2, 4]);
 	assert.equal(session.shuffle, "no");
 });
 
@@ -191,7 +191,7 @@ test("computes reviewed_today from the current session cards only", () => {
 	const model = parseModel(
 		[
 			"```yaml",
-			"filter_difficulty: [3, 8]",
+			"filter_difficulty: [2, 4]",
 			"shuffle: no",
 			"```",
 			"",
@@ -199,7 +199,7 @@ test("computes reviewed_today from the current session cards only", () => {
 			"",
 			"```yaml",
 			"id: alpha111",
-			"difficulty: 3",
+			"difficulty: 2",
 			"last_reviewed: 2026-04-26",
 			"paused: no",
 			"```",
@@ -218,7 +218,7 @@ test("computes reviewed_today from the current session cards only", () => {
 			"",
 			"```yaml",
 			"id: beta2222",
-			"difficulty: 6",
+			"difficulty: 3",
 			"last_reviewed: 2026-04-26",
 			"paused: no",
 			"```",
@@ -237,7 +237,7 @@ test("computes reviewed_today from the current session cards only", () => {
 			"",
 			"```yaml",
 			"id: delta444",
-			"difficulty: 8",
+			"difficulty: 4",
 			"last_reviewed: 2026-04-20",
 			"paused: no",
 			"```",

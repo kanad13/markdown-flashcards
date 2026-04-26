@@ -48,10 +48,10 @@ shuffle: yes
 ```
 ````
 
-| Field               | Type                     | Description                                                                                                       |
-| ------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `filter_difficulty` | array of integers (1–10) | Only cards with a matching difficulty are included in the session. Omitting this field includes all difficulties. |
-| `shuffle`           | `yes` / `no`             | `yes` = cards are presented in a random order each session. `no` = cards are presented in file order.             |
+| Field               | Type                    | Description                                                                                                       |
+| ------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `filter_difficulty` | array of integers (1–5) | Only cards with a matching difficulty are included in the session. Omitting this field includes all difficulties. |
+| `shuffle`           | `yes` / `no`            | `yes` = cards are presented in a random order each session. `no` = cards are presented in file order.             |
 
 ### 4.2 Card block format
 
@@ -90,7 +90,7 @@ Answer text or Markdown here.
 | Field           | Type                | Default        | Description                                                                                      |
 | --------------- | ------------------- | -------------- | ------------------------------------------------------------------------------------------------ |
 | `id`            | string (8-char hex) | auto-generated | Unique identifier for the card. Generated once, never overwritten.                               |
-| `difficulty`    | integer (1–10)      | `5`            | User-assigned difficulty label. Used for session filtering.                                      |
+| `difficulty`    | integer (1–5)       | `3`            | User-assigned difficulty label. Used for session filtering.                                      |
 | `last_reviewed` | date (`YYYY-MM-DD`) | today's date   | Set explicitly by the user via "Mark as Reviewed".                                               |
 | `paused`        | `yes` / `no`        | `no`           | `yes` = this card is paused and will not appear in any session, regardless of difficulty filter. |
 
@@ -201,7 +201,8 @@ The resulting filtered and ordered list is the session stack.
 
 - Changing `difficulty` updates that card in `cards.md` immediately.
 - Marking a card as reviewed sets `last_reviewed` to today's date.
-- Marking a card as reviewed is the only action that updates `last_reviewed`.
+- Review actions are the only UI actions that update `last_reviewed`.
+- The UI may undo a review made during the current browser session by restoring the card's previous `last_reviewed` date.
 
 ## 7. User interface contract
 
@@ -214,23 +215,27 @@ The resulting filtered and ordered list is the session stack.
 ### 7.2 Session shell
 
 - Study mode uses one unified session shell rather than separate permanent session panels.
-- When collapsed, the shell shows only two fixed-width controls placed at opposite edges: a guide toggle on the left and a session-info toggle on the right.
+- The top bar keeps three items in a stable order: a guide toggle on the left, a current-card summary in the center, and a session-info toggle on the right.
+- The current-card summary should stay visible even when session info is collapsed.
 - The guide toggle reads `Show guide` or `Hide guide` depending on state.
 - The session-info toggle reads `Show session info` or `Hide session info` depending on state.
 - Open and closed states should be visually distinct.
-- When expanded, session information is shown as dense horizontal metadata strips.
-- Expanded session info should avoid redundant app-name, session-title, or floating progress summaries when the same facts are already presented more clearly inside the strips.
-- The progress metadata item uses the format `Card X of Y · Z reviewed today`.
+- When expanded, session information should show session-level facts only, in this order: `File`, `Order`, `Filter`, `Eligible`, `Reviewed today`.
+- Expanded session info should avoid redundant app-name, session-title, floating progress summaries, or internal current-card metadata such as raw card IDs.
 
 ### 7.3 Study toolbar and card presentation
 
 - `## Front` content is shown by default.
 - `Reveal` / `Hide` toggles `## Back`. No animations are required.
-- The study toolbar contains `Previous`, `Next`, the front/back state indicator, the difficulty control, `Reveal` / `Hide`, and `Mark as Reviewed`.
+- The study toolbar contains `Previous`, `Next`, the difficulty control, `Reveal` / `Hide`, and `Mark as Reviewed`.
 - On desktop widths, those controls live together on one slim top row above the card content.
+- A thin session-position progress bar sits directly below the toolbar.
 - `Previous` / `Next` should read as one connected navigation control.
 - Toolbar controls should keep stable widths so label changes do not shift neighboring items.
-- The difficulty control should stay compact because its value range is `1–10`, but it should still look intentional and usable.
+- The difficulty control uses a clearly labeled compact select with the values `1–5`.
+- The front and back surfaces should look visually distinct when the answer is revealed, without relying on a dedicated front/back chip in the toolbar.
+- Keyboard shortcuts should support `←` / `→` for navigation, `1–5` for difficulty, `Space` / `Enter` to reveal and hide, and `R` to toggle reviewed state when undo is available.
+- The review button should visually indicate whether the current card is already reviewed today.
 - Long card content should use normal page scrolling rather than a nested main-content scroller.
 
 ### 7.4 Empty state
@@ -272,14 +277,15 @@ Keep v1 verification mostly in Node so feedback stays fast and deterministic.
 4. **API integration tests**
    - load the current session
    - update card difficulty
-   - mark a card as reviewed
+   - mark a card as reviewed via `PATCH`
    - confirm each write produces the expected full-file rewrite
 
 5. **Frontend state and shell tests**
    - guide surface renders expected file/session/help information
    - dismissing the guide preserves session state
    - session shell show/hide behavior works without losing context
-   - study toolbar exposes the required stable-width controls
+   - study toolbar exposes the required stable-width controls, a labeled 1–5 difficulty select, and the session-position progress bar
+   - keyboard shortcuts map to navigation, reveal/review, and difficulty updates without hijacking focused form controls
    - long-card layouts rely on page scrolling rather than a nested main-content scroller
 
 6. **Security tests**

@@ -3,19 +3,28 @@ const test = require("node:test");
 
 const {
 	APP_INFO,
+	DEFAULT_DIFFICULTY,
+	DIFFICULTY_VALUES,
 	UI_LABELS,
 	applyCardUpdate,
+	canUndoReview,
 	buildDifficultyOptions,
 	createInitialState,
-	formatCardSideLabel,
+	formatCurrentCardLabel,
 	formatFilterLabel,
 	formatGuideToggleLabel,
 	formatProgressText,
 	formatSessionToggleLabel,
 	formatStackMode,
+	getNextReviewMutation,
+	getReviewButtonState,
 	getCurrentCard,
+	getTodayKey,
+	getSessionProgress,
+	isCardReviewedToday,
 	moveIndex,
 	renderMarkdown,
+	resolveKeyboardShortcut,
 	setSessionBoxExpanded,
 	setOverviewVisibility,
 } = require("../public/app.js");
@@ -61,7 +70,7 @@ test("formatStackMode returns friendly labels for file order and shuffled sessio
 	assert.equal(APP_INFO.sourceFileLabel, "cards.md");
 });
 
-test("toggle label helpers and card-side labels match the current shell language", () => {
+test("toggle label helpers match the current shell language", () => {
 	assert.equal(UI_LABELS.guideToggle.show, "Show guide");
 	assert.equal(UI_LABELS.guideToggle.hide, "Hide guide");
 	assert.equal(UI_LABELS.sessionInfoToggle.show, "Show session info");
@@ -70,8 +79,25 @@ test("toggle label helpers and card-side labels match the current shell language
 	assert.equal(formatGuideToggleLabel(true), "Hide guide");
 	assert.equal(formatSessionToggleLabel(false), "Show session info");
 	assert.equal(formatSessionToggleLabel(true), "Hide session info");
-	assert.equal(formatCardSideLabel(false), "Front");
-	assert.equal(formatCardSideLabel(true), "Front + Back");
+});
+
+test("formatCurrentCardLabel shows the persistent top-bar card summary", () => {
+	assert.equal(formatCurrentCardLabel({ total_cards: 7 }, 1), "Card 2 of 7");
+	assert.equal(
+		formatCurrentCardLabel({ total_cards: 0 }, -1, "Loading session…"),
+		"Loading session…",
+	);
+});
+
+test("getSessionProgress exposes the current card position for the toolbar progress bar", () => {
+	assert.deepEqual(getSessionProgress({ total_cards: 7 }, 1), {
+		max: 7,
+		value: 2,
+	});
+	assert.deepEqual(getSessionProgress({ total_cards: 0 }, -1), {
+		max: 1,
+		value: 0,
+	});
 });
 
 test("createInitialState starts with the overview open, first card selected, and the back hidden", () => {
@@ -192,14 +218,170 @@ test("setOverviewVisibility toggles between overview and study mode without losi
 	);
 });
 
-test("buildDifficultyOptions always returns 10 options with the requested value selected", () => {
-	const options = buildDifficultyOptions(6);
+test("buildDifficultyOptions returns the 1–5 dropdown options with the selected value", () => {
+	const options = buildDifficultyOptions(4);
 
-	assert.equal(options.length, 10);
+	assert.deepEqual(DIFFICULTY_VALUES, [1, 2, 3, 4, 5]);
+	assert.equal(DEFAULT_DIFFICULTY, 3);
+	assert.equal(options.length, 5);
 	assert.equal(options[0].value, 1);
-	assert.equal(options[9].value, 10);
+	assert.equal(options[4].value, 5);
+	assert.deepEqual(
+		options.map((option) => option.label),
+		["1", "2", "3", "4", "5"],
+	);
 	assert.equal(options.filter((option) => option.selected).length, 1);
-	assert.equal(options.find((option) => option.selected).value, 6);
+	assert.equal(options.find((option) => option.selected).value, 4);
+});
+
+test("review helpers describe reviewed state and current-session undo availability", () => {
+	const baseState = createInitialState({
+		session: {
+			card_ids: ["card-one"],
+			total_cards: 1,
+			reviewed_today: 0,
+			shuffle: "no",
+		},
+		cards: [
+			{
+				id: "card-one",
+				difficulty: 3,
+				last_reviewed: "2026-04-20",
+				front: "Q1",
+				back: "A1",
+			},
+		],
+	});
+	baseState.isOverviewVisible = false;
+
+	assert.equal(isCardReviewedToday(getCurrentCard(baseState), "2026-04-26"), false);
+	assert.equal(canUndoReview(baseState), false);
+	assert.deepEqual(getNextReviewMutation(baseState, "2026-04-26"), {
+		reviewed: true,
+	});
+	assert.deepEqual(getReviewButtonState(baseState, "2026-04-26"), {
+		label: "Mark as Reviewed",
+		title: "Mark as reviewed (R)",
+		disabled: false,
+		reviewed: false,
+		undoable: false,
+	});
+
+	const reviewedState = {
+		...baseState,
+		cards: [
+			{
+				...baseState.cards[0],
+				last_reviewed: "2026-04-26",
+			},
+		],
+		reviewUndoDates: {
+			"card-one": "2026-04-20",
+		},
+	};
+
+	assert.equal(isCardReviewedToday(getCurrentCard(reviewedState), "2026-04-26"), true);
+	assert.equal(canUndoReview(reviewedState), true);
+	assert.deepEqual(getNextReviewMutation(reviewedState, "2026-04-26"), {
+		reviewed: false,
+		restoreLastReviewed: "2026-04-20",
+	});
+	assert.deepEqual(getReviewButtonState(reviewedState, "2026-04-26"), {
+		label: "Reviewed today",
+		title: "Unmark reviewed (R)",
+		disabled: false,
+		reviewed: true,
+		undoable: true,
+	});
+});
+
+test("resolveKeyboardShortcut maps navigation, reveal/review, and difficulty shortcuts while respecting focus", () => {
+	const baseState = createInitialState({
+		session: {
+			card_ids: ["card-one", "card-two"],
+			total_cards: 2,
+			reviewed_today: 0,
+			shuffle: "no",
+		},
+		cards: [
+			{
+				id: "card-one",
+				difficulty: 2,
+				last_reviewed: "2026-04-20",
+				front: "Q1",
+				back: "A1",
+			},
+			{
+				id: "card-two",
+				difficulty: 4,
+				last_reviewed: "2026-04-20",
+				front: "Q2",
+				back: "A2",
+			},
+		],
+	});
+	baseState.isOverviewVisible = false;
+
+	assert.deepEqual(
+		resolveKeyboardShortcut({ key: "ArrowRight", target: {} }, baseState),
+		{ type: "next" },
+	);
+	assert.deepEqual(
+		resolveKeyboardShortcut({ key: "1", target: {} }, baseState),
+		{ type: "difficulty", value: 1 },
+	);
+	assert.deepEqual(
+		resolveKeyboardShortcut({ key: "Enter", target: {} }, baseState),
+		{ type: "toggleReveal" },
+	);
+	assert.deepEqual(
+		resolveKeyboardShortcut(
+			{ code: "Space", key: " ", target: {} },
+			{ ...baseState, isBackVisible: true },
+		),
+		{ type: "toggleReveal" },
+	);
+	assert.deepEqual(
+		resolveKeyboardShortcut({ key: "r", target: {} }, baseState),
+		{ type: "reviewToggle" },
+	);
+	assert.equal(
+		resolveKeyboardShortcut(
+			{ key: "1", target: { tagName: "INPUT" } },
+			baseState,
+		),
+		null,
+	);
+	assert.equal(
+		resolveKeyboardShortcut(
+			{ key: "Enter", target: { tagName: "BUTTON" } },
+			baseState,
+		),
+		null,
+	);
+	assert.equal(
+		resolveKeyboardShortcut(
+			{ key: "ArrowLeft", metaKey: true, target: {} },
+			baseState,
+		),
+		null,
+	);
+	assert.equal(
+		resolveKeyboardShortcut(
+			{ key: "r", target: {} },
+			{
+				...baseState,
+				cards: [
+					{
+						...baseState.cards[0],
+						last_reviewed: getTodayKey(),
+					},
+					baseState.cards[1],
+				],
+			},
+		),
+		null,
+	);
 });
 
 test("moveIndex clamps previous and next navigation within the session bounds", () => {
@@ -240,7 +422,7 @@ test("applyCardUpdate merges API responses without changing the current position
 	const nextState = applyCardUpdate(state, {
 		card: {
 			id: "card-two",
-			difficulty: 7,
+			difficulty: 5,
 			last_reviewed: "2026-04-26",
 			front: "Q2",
 			back: "A2",
@@ -255,7 +437,7 @@ test("applyCardUpdate merges API responses without changing the current position
 
 	assert.equal(nextState.currentIndex, 1);
 	assert.equal(nextState.isOverviewVisible, false);
-	assert.equal(nextState.cards[1].difficulty, 7);
+	assert.equal(nextState.cards[1].difficulty, 5);
 	assert.equal(nextState.cards[1].last_reviewed, "2026-04-26");
 	assert.equal(nextState.session.reviewed_today, 1);
 });

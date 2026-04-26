@@ -3,6 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 
 const { parseCardsFile, serializeCardsFile } = require("./cards-file");
+const { DEFAULT_DIFFICULTY } = require("./difficulty-scale");
 
 class StartupValidationError extends Error {
 	constructor(message, details = {}) {
@@ -231,7 +232,7 @@ function repairCardsModel(
 		}
 
 		if (isMissingValue(metadata.difficulty)) {
-			metadata.difficulty = 5;
+			metadata.difficulty = DEFAULT_DIFFICULTY;
 			added.push("difficulty");
 		}
 

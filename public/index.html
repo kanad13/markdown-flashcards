@@ -17,6 +17,10 @@
 			<div class="session-shell-controls" id="session-shell-controls">
 				<button type="button" class="secondary-button shell-toggle" id="overview-toggle-button" aria-pressed="true">Hide
 					guide</button>
+				<div class="session-summary" id="session-summary">
+					<p class="session-summary-label">Current card</p>
+					<p class="session-summary-value" id="current-card-text" aria-live="polite">Loading session…</p>
+				</div>
 				<button type="button" class="secondary-button shell-toggle" id="session-toggle-button" aria-pressed="false">Show
 					session info</button>
 			</div>
@@ -24,11 +28,7 @@
 			<div class="session-shell-body is-hidden" id="session-shell-body">
 				<div class="detail-strip-group">
 					<p class="detail-strip-name">Session info</p>
-					<dl class="metadata-strip" id="session-info-strip">
-						<div class="meta-chip meta-chip-progress">
-							<dt>Progress</dt>
-							<dd id="progress-text" aria-live="polite">Loading session…</dd>
-						</div>
+					<dl class="session-info-grid" id="session-info-strip">
 						<div class="meta-chip">
 							<dt>File</dt>
 							<dd id="session-source-file">cards.md</dd>
@@ -37,7 +37,7 @@
 							<dt>Order</dt>
 							<dd id="stack-mode">Loading…</dd>
 						</div>
-						<div class="meta-chip">
+						<div class="meta-chip meta-chip-filter">
 							<dt>Filter</dt>
 							<dd id="difficulty-filter">—</dd>
 						</div>
@@ -48,20 +48,6 @@
 						<div class="meta-chip">
 							<dt>Reviewed today</dt>
 							<dd id="reviewed-today">0</dd>
-						</div>
-					</dl>
-				</div>
-
-				<div class="detail-strip-group">
-					<p class="detail-strip-name">Current card</p>
-					<dl class="metadata-strip" id="current-card-strip">
-						<div class="meta-chip">
-							<dt>Card</dt>
-							<dd id="card-id">—</dd>
-						</div>
-						<div class="meta-chip">
-							<dt>Last reviewed</dt>
-							<dd id="last-reviewed">—</dd>
 						</div>
 					</dl>
 				</div>
@@ -120,8 +106,12 @@
 					<ol class="guide-list">
 						<li>Use <strong>Start studying</strong> to enter the compact reader-first layout.</li>
 						<li><strong>Reveal answer</strong> shows the back, and <strong>Hide answer</strong> conceals it again.</li>
-						<li>Changing <strong>Difficulty</strong> saves immediately to <code>cards.md</code>.</li>
-						<li>Only <strong>Mark as Reviewed</strong> changes <code>last_reviewed</code>.</li>
+						<li>Use <strong>←</strong> / <strong>→</strong> to move, use the <strong>Difficulty</strong> menu or press
+							<strong>1–5</strong> to rate the current card, and use <strong>Space</strong> / <strong>Enter</strong>
+							to reveal or hide the answer, and use <strong>R</strong> to toggle reviewed status.
+						</li>
+						<li>Changing <strong>Difficulty</strong> saves immediately to <code>cards.md</code> on a 1–5 scale.</li>
+						<li>Only the <strong>review</strong> controls update <code>last_reviewed</code>.</li>
 						<li><strong>Previous</strong> and <strong>Next</strong> only navigate the current session stack.</li>
 					</ol>
 				</article>
@@ -142,17 +132,23 @@
 			<section class="panel study-panel" aria-label="Flashcard study area">
 				<div class="study-toolbar" id="study-toolbar">
 					<div class="navigation-group" id="navigation-group">
-						<button type="button" class="secondary-button segmented-button" id="previous-button">Previous</button>
-						<button type="button" class="secondary-button segmented-button" id="next-button">Next</button>
+						<button type="button" class="secondary-button segmented-button" id="previous-button" title="Previous (←)"
+							aria-keyshortcuts="ArrowLeft">Previous</button>
+						<button type="button" class="secondary-button segmented-button" id="next-button" title="Next (→)"
+							aria-keyshortcuts="ArrowRight">Next</button>
 					</div>
-					<span class="chip toolbar-chip" id="card-side-label">Front</span>
 					<label class="toolbar-field" id="difficulty-field" for="difficulty-select">
 						<span class="toolbar-field-label">Difficulty</span>
-						<select id="difficulty-select" name="difficulty"></select>
+						<select id="difficulty-select" name="difficulty" aria-label="Difficulty"></select>
 					</label>
-					<button type="button" class="secondary-button toolbar-button" id="reveal-button">Reveal answer</button>
-					<button type="button" class="primary-button toolbar-button" id="review-button">Mark as Reviewed</button>
+					<button type="button" class="secondary-button toolbar-button" id="reveal-button"
+						title="Reveal or hide answer (Space or Enter)">Reveal answer</button>
+					<button type="button" class="primary-button toolbar-button" id="review-button"
+						title="Mark as reviewed (R)">Mark as Reviewed</button>
 				</div>
+
+				<progress class="session-progress" id="session-progress" max="1" value="0"
+					aria-label="Session position"></progress>
 
 				<div class="empty-state is-hidden" id="empty-state">
 					<h2>No cards in this session</h2>
@@ -162,15 +158,19 @@
 					</p>
 				</div>
 
-				<section class="face-panel" id="front-panel">
+				<section class="face-panel face-panel-front" id="front-panel">
 					<div class="face-heading-row">
+						<p class="face-kicker">Prompt</p>
 						<h2>Front</h2>
 					</div>
 					<div class="markdown-body" id="front-content"></div>
 				</section>
 
-				<section class="face-panel" id="back-panel" hidden>
+				<hr class="answer-divider" id="answer-divider" hidden />
+
+				<section class="face-panel face-panel-back" id="back-panel" hidden>
 					<div class="face-heading-row">
+						<p class="face-kicker">Answer</p>
 						<h2>Back</h2>
 					</div>
 					<div class="markdown-body" id="back-content"></div>
