@@ -233,6 +233,8 @@ The resulting filtered and ordered list is the session stack.
 - The session-info toggle reads `Show session info` or `Hide session info` depending on state.
 - Open and closed states should be visually distinct.
 - When expanded, session information should show session-level facts only, in this order: `Order`, `Filters`, `Eligible`, `Reviewed today`.
+- The `Filters` value should default to `All difficulties` when there is no effective difficulty restriction, including when the configured difficulty list is effectively `1–5`.
+- The `Filters` value should mention the reviewed-today rule only when `exclude_reviewed_today` is enabled; the default inclusion case should stay implicit rather than reading as redundant filler.
 - Expanded session info should avoid redundant app-name, session-title, floating progress summaries, or internal current-card metadata such as raw card IDs.
 
 ### 7.3 Study toolbar and card presentation

@@ -44,6 +44,10 @@ test("frontend shell loads marked and DOMPurify from CDNs and exposes the corner
 	assert.match(html, /aria-pressed="true">Hide\s+guide/);
 	assert.match(html, /aria-pressed="false">Show\s+session info/);
 	assert.match(html, />Current card</);
+	assert.match(html, />Order</);
+	assert.match(html, />Filters</);
+	assert.match(html, />Eligible</);
+	assert.match(html, />Reviewed today</);
 	assert.match(html, />Position</);
 	assert.match(html, />Last reviewed</);
 	assert.match(html, />On card</);

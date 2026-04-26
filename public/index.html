@@ -80,14 +80,25 @@
 						Read this once to understand what the top banner tells you, which controls matter during review, and which
 						<code>cards.md</code> settings shape the next session. Once the flow is clear, jump straight into the deck.
 					</p>
-					<ul class="overview-hero-list">
-						<li>Use <strong>Show session info</strong> above for order, filters, eligible count, and reviewed-today
-							count.</li>
+					<ul class="guide-list">
+						<li>Use <strong>Show session info</strong> above for order, filters, eligible count, and reviewed-today count.</li>
 						<li>Changes to session settings in <code>cards.md</code> apply after restart.</li>
-						<li>Once that context makes sense, press <strong>Start studying</strong> and keep the guide one toggle away.
-						</li>
+						<li>Once that context makes sense, press <strong>Start studying</strong> and keep the guide one toggle away.</li>
 					</ul>
 					<button type="button" class="primary-button" id="start-study-button">Start studying</button>
+				</div>
+				<div class="overview-visual">
+					<pre><code>&lt;!-- card --&gt;
+
+## Front
+
+What does the `===` operator check in JavaScript?
+
+## Back
+
+Strict equality — it compares both value and type.
+
+&lt;!-- /card --&gt;</code></pre>
 				</div>
 			</div>
 
@@ -116,7 +127,7 @@
 				<article class="info-card guide-band">
 					<div class="guide-band-heading">
 						<h2>Configure <code>cards.md</code></h2>
-						<p>These settings shape the next session stack. Keep them small and explicit.</p>
+						<p>These settings shape the next session stack after the next server start. Keep them small and explicit.</p>
 					</div>
 					<div class="guide-band-content">
 						<ul class="guide-list guide-settings-list">

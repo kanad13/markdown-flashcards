@@ -90,14 +90,17 @@
 
 	function formatReviewedFilterLabel(excludeReviewedToday) {
 		return excludeReviewedToday === true
-			? "Excludes reviewed today"
-			: "Includes reviewed today";
+			? "Skips cards already reviewed today"
+			: null;
 	}
 
 	function formatSessionFilterSummary(session) {
-		return `${formatFilterLabel(session?.filter_difficulty)} · ${formatReviewedFilterLabel(
-			session?.exclude_reviewed_today,
-		)}`;
+		return [
+			formatFilterLabel(session?.filter_difficulty),
+			formatReviewedFilterLabel(session?.exclude_reviewed_today),
+		]
+			.filter(Boolean)
+			.join(" · ");
 	}
 
 	function getCurrentCardSummary(state, nowMs = Date.now()) {
@@ -256,6 +259,20 @@
 
 	function formatFilterLabel(filterDifficulty) {
 		if (!Array.isArray(filterDifficulty) || filterDifficulty.length === 0) {
+			return "All difficulties";
+		}
+
+		const normalizedFilter = [...new Set(filterDifficulty)]
+			.map((value) => Number(value))
+			.filter((value) => DIFFICULTY_VALUES.includes(value))
+			.sort((left, right) => left - right);
+
+		if (
+			normalizedFilter.length === DIFFICULTY_VALUES.length &&
+			normalizedFilter.every(
+				(value, index) => value === DIFFICULTY_VALUES[index],
+			)
+		) {
 			return "All difficulties";
 		}
 

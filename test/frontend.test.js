@@ -183,19 +183,29 @@ test("createInitialState starts with the overview open, first card selected, and
 	assert.equal(formatFilterLabel(state.session.filter_difficulty), "1, 2");
 	assert.equal(
 		formatSessionFilterSummary(state.session),
-		"1, 2 · Excludes reviewed today",
+		"1, 2 · Skips cards already reviewed today",
 	);
 });
 
 test("review filter helpers describe whether reviewed-today cards are included in the session", () => {
-	assert.equal(formatReviewedFilterLabel(false), "Includes reviewed today");
-	assert.equal(formatReviewedFilterLabel(true), "Excludes reviewed today");
+	assert.equal(formatReviewedFilterLabel(false), null);
+	assert.equal(
+		formatReviewedFilterLabel(true),
+		"Skips cards already reviewed today",
+	);
 	assert.equal(
 		formatSessionFilterSummary({
 			filter_difficulty: null,
 			exclude_reviewed_today: false,
 		}),
-		"All difficulties · Includes reviewed today",
+		"All difficulties",
+	);
+	assert.equal(
+		formatSessionFilterSummary({
+			filter_difficulty: [1, 2, 3, 4, 5],
+			exclude_reviewed_today: true,
+		}),
+		"All difficulties · Skips cards already reviewed today",
 	);
 });
 
