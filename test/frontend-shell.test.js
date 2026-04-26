@@ -39,7 +39,10 @@ test("frontend shell loads marked and DOMPurify from CDNs and exposes the corner
 	assert.match(html, />Show\s+session info</);
 	assert.match(html, /aria-pressed="true">Hide\s+guide/);
 	assert.match(html, /aria-pressed="false">Show\s+session info/);
-	assert.match(html, /Space<\/strong>\s*\/\s*<strong>Enter<\/strong>\s+to reveal or hide/i);
+	assert.match(
+		html,
+		/Space<\/strong>\s*\/\s*<strong>Enter<\/strong>\s+to reveal or hide/i,
+	);
 	assert.match(html, /<strong>R<\/strong>\s+to toggle reviewed status/i);
 	assert.doesNotMatch(html, /id="session-details-panel"/);
 	assert.doesNotMatch(html, /id="summary-strip"/);

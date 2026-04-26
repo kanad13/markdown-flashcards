@@ -83,15 +83,16 @@ function createApp({
 	async function handleReviewUpdate(request, response, next) {
 		try {
 			const runtimeState = request.app.locals.runtimeState;
-			const nextState = request.body?.reviewed === false
-				? setCardLastReviewed(
-						runtimeState.model,
-						request.params.cardId,
-						request.body?.restore_last_reviewed,
-					)
-				: markCardReviewed(runtimeState.model, request.params.cardId, {
-						now: runtimeState.now,
-					});
+			const nextState =
+				request.body?.reviewed === false
+					? setCardLastReviewed(
+							runtimeState.model,
+							request.params.cardId,
+							request.body?.restore_last_reviewed,
+						)
+					: markCardReviewed(runtimeState.model, request.params.cardId, {
+							now: runtimeState.now,
+						});
 
 			runtimeState.model = await writeCardsModel(
 				runtimeState.cardsFilePath,

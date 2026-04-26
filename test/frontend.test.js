@@ -254,7 +254,10 @@ test("review helpers describe reviewed state and current-session undo availabili
 	});
 	baseState.isOverviewVisible = false;
 
-	assert.equal(isCardReviewedToday(getCurrentCard(baseState), "2026-04-26"), false);
+	assert.equal(
+		isCardReviewedToday(getCurrentCard(baseState), "2026-04-26"),
+		false,
+	);
 	assert.equal(canUndoReview(baseState), false);
 	assert.deepEqual(getNextReviewMutation(baseState, "2026-04-26"), {
 		reviewed: true,
@@ -280,7 +283,10 @@ test("review helpers describe reviewed state and current-session undo availabili
 		},
 	};
 
-	assert.equal(isCardReviewedToday(getCurrentCard(reviewedState), "2026-04-26"), true);
+	assert.equal(
+		isCardReviewedToday(getCurrentCard(reviewedState), "2026-04-26"),
+		true,
+	);
 	assert.equal(canUndoReview(reviewedState), true);
 	assert.deepEqual(getNextReviewMutation(reviewedState, "2026-04-26"), {
 		reviewed: false,

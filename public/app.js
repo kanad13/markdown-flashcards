@@ -161,8 +161,8 @@
 	function canUndoReview(state, card = getCurrentCard(state)) {
 		return Boolean(
 			card &&
-				state?.reviewUndoDates &&
-				Object.prototype.hasOwnProperty.call(state.reviewUndoDates, card.id),
+			state?.reviewUndoDates &&
+			Object.prototype.hasOwnProperty.call(state.reviewUndoDates, card.id),
 		);
 	}
 
@@ -230,9 +230,7 @@
 			return {
 				label: "Saving…",
 				title:
-					reviewed && undoable
-						? "Unmark reviewed (R)"
-						: "Mark as reviewed (R)",
+					reviewed && undoable ? "Unmark reviewed (R)" : "Mark as reviewed (R)",
 				disabled: true,
 				reviewed,
 				undoable,
@@ -783,9 +781,8 @@
 								? { reviewed: true }
 								: {
 										reviewed: false,
-										restore_last_reviewed:
-											reviewMutation.restoreLastReviewed,
-								  },
+										restore_last_reviewed: reviewMutation.restoreLastReviewed,
+									},
 						),
 					},
 				);

@@ -98,11 +98,7 @@ function updateCardDifficulty(model, cardId, difficulty) {
 }
 
 function markCardReviewed(model, cardId, { now = () => new Date() } = {}) {
-	return setCardLastReviewed(
-		model,
-		cardId,
-		formatCalendarDate(now()),
-	);
+	return setCardLastReviewed(model, cardId, formatCalendarDate(now()));
 }
 
 function setCardLastReviewed(model, cardId, lastReviewed) {
