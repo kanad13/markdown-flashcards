@@ -11,11 +11,16 @@ const {
 	buildDifficultyOptions,
 	createInitialState,
 	formatCurrentCardLabel,
+	formatElapsedTimer,
 	formatFilterLabel,
 	formatGuideToggleLabel,
+	formatLastReviewedValue,
 	formatProgressText,
+	formatReviewedFilterLabel,
+	formatSessionFilterSummary,
 	formatSessionToggleLabel,
 	formatStackMode,
+	getCurrentCardSummary,
 	getNextReviewMutation,
 	getReviewButtonState,
 	getCurrentCard,
@@ -38,6 +43,45 @@ test("formatProgressText shows the persistent progress indicator format", () => 
 		formatProgressText({ total_cards: 0, reviewed_today: 0 }, -1),
 		"Card 0 of 0 · 0 reviewed today",
 	);
+});
+
+test("review summary helpers format readable review-date and timer metadata", () => {
+	assert.equal(formatElapsedTimer(null, 62_000), "00:00");
+	assert.equal(formatElapsedTimer(1_000, 62_000), "01:01");
+	assert.equal(formatElapsedTimer(0, 3_723_000), "1:02:03");
+	assert.equal(formatLastReviewedValue("2026-04-26", "2026-04-26"), "Today");
+	assert.equal(
+		formatLastReviewedValue("2026-04-20", "2026-04-26"),
+		"Apr 20, 2026",
+	);
+	assert.equal(formatLastReviewedValue(), "Not yet");
+
+	const state = createInitialState({
+		session: {
+			card_ids: ["card-one"],
+			total_cards: 1,
+			reviewed_today: 0,
+			shuffle: "no",
+		},
+		cards: [
+			{
+				id: "card-one",
+				difficulty: 3,
+				last_reviewed: "2026-04-20",
+				front: "Q1",
+				back: "A1",
+			},
+		],
+	});
+	state.sessionStartedAt = 0;
+	state.cardStartedAt = 1_000;
+
+	assert.deepEqual(getCurrentCardSummary(state, 62_000), {
+		position: "1 of 1",
+		reviewed: "Apr 20, 2026",
+		cardTimer: "01:01",
+		sessionTimer: "01:02",
+	});
 });
 
 test("renderMarkdown renders markdown and sanitizes the resulting HTML before insertion", () => {
@@ -82,10 +126,10 @@ test("toggle label helpers match the current shell language", () => {
 });
 
 test("formatCurrentCardLabel shows the persistent top-bar card summary", () => {
-	assert.equal(formatCurrentCardLabel({ total_cards: 7 }, 1), "Card 2 of 7");
+	assert.equal(formatCurrentCardLabel({ total_cards: 7 }, 1), "2 of 7");
 	assert.equal(
-		formatCurrentCardLabel({ total_cards: 0 }, -1, "Loading session…"),
-		"Loading session…",
+		formatCurrentCardLabel({ total_cards: 0 }, -1, "Loading…"),
+		"Loading…",
 	);
 });
 
@@ -104,6 +148,7 @@ test("createInitialState starts with the overview open, first card selected, and
 	const state = createInitialState({
 		session: {
 			card_ids: ["card-one", "card-two"],
+			exclude_reviewed_today: true,
 			total_cards: 2,
 			reviewed_today: 1,
 			shuffle: "no",
@@ -131,8 +176,27 @@ test("createInitialState starts with the overview open, first card selected, and
 	assert.equal(state.isBackVisible, false);
 	assert.equal(state.isOverviewVisible, true);
 	assert.equal(state.isSessionBoxExpanded, false);
+	assert.equal(state.sessionStartedAt, null);
+	assert.equal(state.cardStartedAt, null);
+	assert.equal(state.session.exclude_reviewed_today, true);
 	assert.equal(getCurrentCard(state).id, "card-one");
 	assert.equal(formatFilterLabel(state.session.filter_difficulty), "1, 2");
+	assert.equal(
+		formatSessionFilterSummary(state.session),
+		"1, 2 · Excludes reviewed today",
+	);
+});
+
+test("review filter helpers describe whether reviewed-today cards are included in the session", () => {
+	assert.equal(formatReviewedFilterLabel(false), "Includes reviewed today");
+	assert.equal(formatReviewedFilterLabel(true), "Excludes reviewed today");
+	assert.equal(
+		formatSessionFilterSummary({
+			filter_difficulty: null,
+			exclude_reviewed_today: false,
+		}),
+		"All difficulties · Includes reviewed today",
+	);
 });
 
 test("setSessionBoxExpanded toggles the unified session box without changing card state", () => {

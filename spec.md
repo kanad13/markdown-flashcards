@@ -45,13 +45,15 @@ File-level frontmatter controls session behavior and must appear once at the ver
 ```yaml
 filter_difficulty: [1, 2, 3]
 shuffle: yes
+exclude_reviewed_today: false
 ```
 ````
 
-| Field               | Type                    | Description                                                                                                       |
-| ------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `filter_difficulty` | array of integers (1–5) | Only cards with a matching difficulty are included in the session. Omitting this field includes all difficulties. |
-| `shuffle`           | `yes` / `no`            | `yes` = cards are presented in a random order each session. `no` = cards are presented in file order.             |
+| Field                    | Type                    | Description                                                                                                                                        |
+| ------------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `filter_difficulty`      | array of integers (1–5) | Only cards with a matching difficulty are included in the session. Omitting this field includes all difficulties.                                  |
+| `shuffle`                | `yes` / `no`            | `yes` = cards are presented in a random order each session. `no` = cards are presented in file order.                                              |
+| `exclude_reviewed_today` | boolean                 | Defaults to `false`. When `true`, cards whose `last_reviewed` already matches the session-start date are skipped while the session stack is built. |
 
 ### 4.2 Card block format
 
@@ -61,6 +63,7 @@ Each card is wrapped in `<!-- card -->` and `<!-- /card -->`. Inside the block, 
 ```yaml
 filter_difficulty: [1, 2, 3]
 shuffle: yes
+exclude_reviewed_today: false
 ```
 
 <!-- card -->
@@ -187,6 +190,7 @@ When the app loads a session, it must:
 
 - apply `filter_difficulty` if present
 - exclude cards whose `paused` value is `yes`
+- exclude cards already reviewed on the session-start date when `exclude_reviewed_today` is `true`
 - apply `shuffle` ordering after filtering
 
 The resulting filtered and ordered list is the session stack.
@@ -196,6 +200,8 @@ The resulting filtered and ordered list is the session stack.
 - The app tracks a current card index within the session stack.
 - `Previous` and `Next` move within that stack but do not update card fields on their own.
 - `reviewed_today` is computed from cards in the current session only.
+- A card excluded by `exclude_reviewed_today: true` is removed only if it was already reviewed when the session stack was created.
+- Cards that remain in the active session stack do not disappear mid-session after the user marks them reviewed.
 
 ### 6.3 Card updates
 
@@ -209,7 +215,10 @@ The resulting filtered and ordered list is the session stack.
 ### 7.1 Guide surface
 
 - The app may open on a dismissible guide / start surface before study mode.
-- The guide summarizes the active file, session settings, eligible-card count, reviewed-today count, and concise usage / start / stop guidance.
+- The persistent session shell may carry current session facts while the guide body focuses on study flow guidance, a concise explanation of the top banner, and configuration help for `cards.md`.
+- The hero area should justify why the guide exists before asking the user to press `Start studying`.
+- The hero may fold short session reminders directly into the main copy rather than using a separate highlighted callout box.
+- The guide should explain that file-level session settings are applied on the next server start / refreshed session rather than hot-reloaded from disk.
 - Dismissing the guide enters study mode without reloading the page.
 
 ### 7.2 Session shell
@@ -217,10 +226,13 @@ The resulting filtered and ordered list is the session stack.
 - Study mode uses one unified session shell rather than separate permanent session panels.
 - The top bar keeps three items in a stable order: a guide toggle on the left, a current-card summary in the center, and a session-info toggle on the right.
 - The current-card summary should stay visible even when session info is collapsed.
+- The current-card summary should present a clear `Current card` heading and may use four compact values beneath it: position in stack, last reviewed value, current-card timer, and overall session timer.
+- The overall session timer starts when study mode first opens and keeps running until the page reloads.
+- The current-card timer starts when study mode first opens on the current card and resets when navigation lands on a different card.
 - The guide toggle reads `Show guide` or `Hide guide` depending on state.
 - The session-info toggle reads `Show session info` or `Hide session info` depending on state.
 - Open and closed states should be visually distinct.
-- When expanded, session information should show session-level facts only, in this order: `File`, `Order`, `Filter`, `Eligible`, `Reviewed today`.
+- When expanded, session information should show session-level facts only, in this order: `Order`, `Filters`, `Eligible`, `Reviewed today`.
 - Expanded session info should avoid redundant app-name, session-title, floating progress summaries, or internal current-card metadata such as raw card IDs.
 
 ### 7.3 Study toolbar and card presentation
@@ -233,7 +245,9 @@ The resulting filtered and ordered list is the session stack.
 - `Previous` / `Next` should read as one connected navigation control.
 - Toolbar controls should keep stable widths so label changes do not shift neighboring items.
 - The difficulty control uses a clearly labeled compact select with the values `1–5`.
+- The `Reveal` / `Hide` control should use the same blue-for-off and green-for-on visual state language as the review control.
 - The front and back surfaces should look visually distinct when the answer is revealed, without relying on a dedicated front/back chip in the toolbar.
+- The card surfaces do not need visible `Front` / `Back` or `Prompt` / `Answer` heading rows; the content itself should remain the focus.
 - Keyboard shortcuts should support `←` / `→` for navigation, `1–5` for difficulty, `Space` / `Enter` to reveal and hide, and `R` to toggle reviewed state when undo is available.
 - The review button should visually indicate whether the current card is already reviewed today.
 - Long card content should use normal page scrolling rather than a nested main-content scroller.
@@ -271,6 +285,7 @@ Keep v1 verification mostly in Node so feedback stays fast and deterministic.
 3. **Session logic tests**
    - `filter_difficulty` inclusion
    - `paused: yes` exclusion
+   - `exclude_reviewed_today: true` exclusion at session creation time only
    - `shuffle: yes` vs `shuffle: no`
    - correct `reviewed_today` computation
 
@@ -284,7 +299,9 @@ Keep v1 verification mostly in Node so feedback stays fast and deterministic.
    - guide surface renders expected file/session/help information
    - dismissing the guide preserves session state
    - session shell show/hide behavior works without losing context
+   - the current-card summary exposes review-date and timer metadata without resetting during rerenders
    - study toolbar exposes the required stable-width controls, a labeled 1–5 difficulty select, and the session-position progress bar
+   - the study surfaces remain unlabeled while the reveal control still exposes clear on/off state
    - keyboard shortcuts map to navigation, reveal/review, and difficulty updates without hijacking focused form controls
    - long-card layouts rely on page scrolling rather than a nested main-content scroller
 

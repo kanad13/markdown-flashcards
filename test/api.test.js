@@ -237,12 +237,78 @@ test("GET /api/session returns the current filtered session stack and reviewed c
 
 	assert.equal(response.status, 200);
 	assert.deepEqual(payload.session.card_ids, ["gamma333", "alpha111"]);
+	assert.equal(payload.session.exclude_reviewed_today, false);
 	assert.equal(payload.session.total_cards, 2);
 	assert.equal(payload.session.reviewed_today, 1);
 	assert.equal(payload.session.shuffle, "yes");
 	assert.deepEqual(
 		payload.cards.map((card) => card.id),
 		["gamma333", "alpha111"],
+	);
+});
+
+test("GET /api/session excludes cards already reviewed today when exclude_reviewed_today is true", async (t) => {
+	const source = [
+		"```yaml",
+		"exclude_reviewed_today: true",
+		"shuffle: no",
+		"```",
+		"",
+		"<!-- card -->",
+		"",
+		"```yaml",
+		"id: alpha111",
+		"difficulty: 3",
+		"last_reviewed: 2026-04-26",
+		"paused: no",
+		"```",
+		"",
+		"## Front",
+		"",
+		"Alpha",
+		"",
+		"## Back",
+		"",
+		"A",
+		"",
+		"<!-- /card -->",
+		"",
+		"<!-- card -->",
+		"",
+		"```yaml",
+		"id: beta2222",
+		"difficulty: 4",
+		"last_reviewed: 2026-04-20",
+		"paused: no",
+		"```",
+		"",
+		"## Front",
+		"",
+		"Beta",
+		"",
+		"## Back",
+		"",
+		"B",
+		"",
+		"<!-- /card -->",
+		"",
+	].join("\n");
+
+	const { baseUrl } = await startTestServer(t, {
+		cardsSource: source,
+	});
+
+	const response = await fetch(`${baseUrl}/api/session`);
+	const payload = await response.json();
+
+	assert.equal(response.status, 200);
+	assert.deepEqual(payload.session.card_ids, ["beta2222"]);
+	assert.equal(payload.session.exclude_reviewed_today, true);
+	assert.equal(payload.session.total_cards, 1);
+	assert.equal(payload.session.reviewed_today, 0);
+	assert.deepEqual(
+		payload.cards.map((card) => card.id),
+		["beta2222"],
 	);
 });
 

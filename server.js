@@ -159,7 +159,10 @@ async function startServer({
 	});
 	const repositoryState = {
 		...startupState,
-		session: createSessionState(startupState.model, { random: shuffleRandom }),
+		session: createSessionState(startupState.model, {
+			random: shuffleRandom,
+			now,
+		}),
 	};
 	const app = createApp({
 		rootDir,

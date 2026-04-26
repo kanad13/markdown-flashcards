@@ -16,17 +16,24 @@ class SessionStateError extends Error {
 	}
 }
 
-function createSessionState(model, { random = Math.random } = {}) {
+function createSessionState(
+	model,
+	{ random = Math.random, now = () => new Date() } = {},
+) {
 	const filterDifficulty = normalizeDifficultyFilter(
 		model?.frontmatter?.filter_difficulty,
 	);
+	const excludeReviewedToday =
+		model?.frontmatter?.exclude_reviewed_today === true;
 	const shuffle = model?.frontmatter?.shuffle === "yes" ? "yes" : "no";
+	const today = formatCalendarDate(now());
 
 	let cards = Array.isArray(model?.cards) ? model.cards.slice() : [];
 	cards = cards.filter(
 		(card) =>
 			!isCardPaused(card?.metadata?.paused) &&
-			matchesDifficulty(card, filterDifficulty),
+			matchesDifficulty(card, filterDifficulty) &&
+			matchesReviewedTodayFilter(card, excludeReviewedToday, today),
 	);
 
 	if (shuffle === "yes") {
@@ -35,6 +42,7 @@ function createSessionState(model, { random = Math.random } = {}) {
 
 	return {
 		card_ids: cards.map((card) => card.metadata.id),
+		exclude_reviewed_today: excludeReviewedToday,
 		filter_difficulty: filterDifficulty,
 		shuffle,
 	};
@@ -54,6 +62,7 @@ function createSessionPayload(
 	return {
 		session: {
 			card_ids: sessionState.card_ids.slice(),
+			exclude_reviewed_today: sessionState.exclude_reviewed_today === true,
 			filter_difficulty: Array.isArray(sessionState.filter_difficulty)
 				? sessionState.filter_difficulty.slice()
 				: null,
@@ -214,6 +223,14 @@ function matchesDifficulty(card, filterDifficulty) {
 
 	const difficulty = Number(card?.metadata?.difficulty);
 	return filterDifficulty.includes(difficulty);
+}
+
+function matchesReviewedTodayFilter(card, excludeReviewedToday, today) {
+	if (!excludeReviewedToday) {
+		return true;
+	}
+
+	return card?.metadata?.last_reviewed !== today;
 }
 
 function isCardPaused(paused) {

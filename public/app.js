@@ -33,11 +33,117 @@
 		return shuffle === "yes" ? "Shuffled session" : "File order";
 	}
 
+	function formatTimerText(milliseconds) {
+		const safeMilliseconds = Number.isFinite(milliseconds)
+			? Math.max(0, milliseconds)
+			: 0;
+		const totalSeconds = Math.floor(safeMilliseconds / 1000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+
+		if (hours > 0) {
+			return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+		}
+
+		return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+	}
+
+	function formatElapsedTimer(startedAt, nowMs = Date.now()) {
+		if (!Number.isFinite(startedAt)) {
+			return "00:00";
+		}
+
+		return formatTimerText(nowMs - startedAt);
+	}
+
+	function formatDisplayDate(dateString) {
+		if (typeof dateString !== "string" || dateString.trim() === "") {
+			return null;
+		}
+
+		const parsedDate = new Date(`${dateString}T00:00:00.000Z`);
+
+		if (Number.isNaN(parsedDate.getTime())) {
+			return null;
+		}
+
+		return new Intl.DateTimeFormat("en", {
+			month: "short",
+			day: "numeric",
+			year: "numeric",
+			timeZone: "UTC",
+		}).format(parsedDate);
+	}
+
+	function formatLastReviewedValue(lastReviewed, todayKey = getTodayKey()) {
+		if (typeof lastReviewed !== "string" || lastReviewed.trim() === "") {
+			return "Not yet";
+		}
+
+		if (lastReviewed === todayKey) {
+			return "Today";
+		}
+
+		return formatDisplayDate(lastReviewed) ?? lastReviewed;
+	}
+
+	function formatReviewedFilterLabel(excludeReviewedToday) {
+		return excludeReviewedToday === true
+			? "Excludes reviewed today"
+			: "Includes reviewed today";
+	}
+
+	function formatSessionFilterSummary(session) {
+		return `${formatFilterLabel(session?.filter_difficulty)} · ${formatReviewedFilterLabel(
+			session?.exclude_reviewed_today,
+		)}`;
+	}
+
+	function getCurrentCardSummary(state, nowMs = Date.now()) {
+		const currentCard = getCurrentCard(state);
+		const fallbackLabel =
+			state?.statusMessage === "Loading session…" ? "Loading…" : "No cards";
+
+		return {
+			position: formatCurrentCardLabel(
+				state?.session,
+				state?.currentIndex,
+				fallbackLabel,
+			),
+			reviewed: currentCard
+				? formatLastReviewedValue(currentCard.last_reviewed)
+				: "—",
+			cardTimer: formatElapsedTimer(state?.cardStartedAt, nowMs),
+			sessionTimer: formatElapsedTimer(state?.sessionStartedAt, nowMs),
+		};
+	}
+
+	function ensureStudyTimersStarted(state, nowMs = Date.now()) {
+		if (!Number.isFinite(nowMs)) {
+			return state;
+		}
+
+		const hasCurrentCard = Boolean(getCurrentCard(state));
+
+		return {
+			...state,
+			sessionStartedAt: Number.isFinite(state?.sessionStartedAt)
+				? state.sessionStartedAt
+				: nowMs,
+			cardStartedAt:
+				hasCurrentCard && !Number.isFinite(state?.cardStartedAt)
+					? nowMs
+					: (state?.cardStartedAt ?? null),
+		};
+	}
+
 	function normalizeSession(session, fallbackTotal = 0) {
 		return {
 			card_ids: Array.isArray(session?.card_ids)
 				? session.card_ids.slice()
 				: [],
+			exclude_reviewed_today: session?.exclude_reviewed_today === true,
 			filter_difficulty: Array.isArray(session?.filter_difficulty)
 				? session.filter_difficulty.slice()
 				: null,
@@ -59,6 +165,8 @@
 			session: normalizeSession(payload.session, cards.length),
 			reviewUndoDates: {},
 			currentIndex: cards.length > 0 ? 0 : -1,
+			sessionStartedAt: null,
+			cardStartedAt: null,
 			isBackVisible: false,
 			isOverviewVisible: true,
 			isSessionBoxExpanded: false,
@@ -113,11 +221,7 @@
 		return state.cards[state.currentIndex];
 	}
 
-	function formatCurrentCardLabel(
-		session,
-		currentIndex,
-		fallbackLabel = "No cards in session",
-	) {
+	function formatCurrentCardLabel(session, currentIndex, fallbackLabel = "—") {
 		const totalCards = Number.isInteger(session?.total_cards)
 			? session.total_cards
 			: 0;
@@ -126,7 +230,7 @@
 			return fallbackLabel;
 		}
 
-		return `Card ${Math.min(currentIndex + 1, totalCards)} of ${totalCards}`;
+		return `${Math.min(currentIndex + 1, totalCards)} of ${totalCards}`;
 	}
 
 	function getTodayKey(date = new Date()) {
@@ -433,8 +537,10 @@
 			answerDivider: document.getElementById("answer-divider"),
 			backContent: document.getElementById("back-content"),
 			backPanel: document.getElementById("back-panel"),
+			currentCardTimerText: document.getElementById("current-card-timer-text"),
+			currentReviewedText: document.getElementById("current-reviewed-text"),
 			currentCardText: document.getElementById("current-card-text"),
-			difficultyFilter: document.getElementById("difficulty-filter"),
+			sessionFilters: document.getElementById("session-filters"),
 			difficultySelect: document.getElementById("difficulty-select"),
 			eligibleCount: document.getElementById("eligible-count"),
 			emptyState: document.getElementById("empty-state"),
@@ -442,22 +548,15 @@
 			frontContent: document.getElementById("front-content"),
 			frontPanel: document.getElementById("front-panel"),
 			nextButton: document.getElementById("next-button"),
-			overviewDifficultyFilter: document.getElementById(
-				"overview-difficulty-filter",
-			),
-			overviewEligibleCount: document.getElementById("overview-eligible-count"),
 			overviewPanel: document.getElementById("overview-panel"),
-			overviewReviewedToday: document.getElementById("overview-reviewed-today"),
-			overviewSourceFile: document.getElementById("overview-source-file"),
-			overviewStackMode: document.getElementById("overview-stack-mode"),
 			overviewToggleButton: document.getElementById("overview-toggle-button"),
 			previousButton: document.getElementById("previous-button"),
 			revealButton: document.getElementById("reveal-button"),
 			reviewButton: document.getElementById("review-button"),
 			reviewedToday: document.getElementById("reviewed-today"),
+			sessionTimerText: document.getElementById("session-timer-text"),
 			sessionProgress: document.getElementById("session-progress"),
 			sessionShellBody: document.getElementById("session-shell-body"),
-			sessionSourceFile: document.getElementById("session-source-file"),
 			sessionToggleButton: document.getElementById("session-toggle-button"),
 			startStudyButton: document.getElementById("start-study-button"),
 			stackMode: document.getElementById("stack-mode"),
@@ -470,19 +569,16 @@
 		const currentCard = getCurrentCard(state);
 		const hasCards = Boolean(currentCard);
 		const stackModeLabel = formatStackMode(state.session.shuffle);
-		const filterLabel = formatFilterLabel(state.session.filter_difficulty);
+		const filterLabel = formatSessionFilterSummary(state.session);
+		const currentCardSummary = getCurrentCardSummary(state);
 		const progress = getSessionProgress(state.session, state.currentIndex);
 		const isDifficultyDisabled = !hasCards || state.busyAction !== null;
 		const reviewButtonState = getReviewButtonState(state);
-		const currentCardLabel = formatCurrentCardLabel(
-			state.session,
-			state.currentIndex,
-			state.statusMessage === "Loading session…"
-				? "Loading session…"
-				: "No cards in session",
-		);
 
-		elements.currentCardText.textContent = currentCardLabel;
+		elements.currentCardText.textContent = currentCardSummary.position;
+		elements.currentReviewedText.textContent = currentCardSummary.reviewed;
+		elements.currentCardTimerText.textContent = currentCardSummary.cardTimer;
+		elements.sessionTimerText.textContent = currentCardSummary.sessionTimer;
 		elements.sessionProgress.max = progress.max;
 		elements.sessionProgress.value = progress.value;
 		elements.sessionProgress.setAttribute(
@@ -496,16 +592,6 @@
 			"is-hidden",
 			state.errorMessage === "",
 		);
-		elements.overviewSourceFile.textContent = APP_INFO.sourceFileLabel;
-		elements.overviewDifficultyFilter.textContent = filterLabel;
-		elements.overviewStackMode.textContent = stackModeLabel;
-		elements.overviewEligibleCount.textContent = String(
-			state.session.total_cards,
-		);
-		elements.overviewReviewedToday.textContent = String(
-			state.session.reviewed_today,
-		);
-		elements.sessionSourceFile.textContent = APP_INFO.sourceFileLabel;
 		elements.overviewPanel.classList.toggle(
 			"is-hidden",
 			!state.isOverviewVisible,
@@ -535,7 +621,7 @@
 
 		elements.stackMode.textContent = stackModeLabel;
 		elements.eligibleCount.textContent = String(state.session.total_cards);
-		elements.difficultyFilter.textContent = filterLabel;
+		elements.sessionFilters.textContent = filterLabel;
 		elements.reviewedToday.textContent = String(state.session.reviewed_today);
 
 		elements.emptyState.classList.toggle("is-hidden", hasCards);
@@ -550,6 +636,11 @@
 			state.busyAction !== null ||
 			state.currentIndex >= state.cards.length - 1;
 		elements.revealButton.disabled = !hasCards;
+		elements.revealButton.setAttribute(
+			"aria-pressed",
+			String(state.isBackVisible),
+		);
+		elements.revealButton.classList.toggle("is-revealed", state.isBackVisible);
 		elements.reviewButton.disabled = reviewButtonState.disabled;
 		elements.revealButton.textContent = state.isBackVisible
 			? "Hide answer"
@@ -658,19 +749,35 @@
 			rerender();
 		}
 
+		const refreshCurrentCardSummary = () => {
+			const summary = getCurrentCardSummary(state);
+			elements.currentCardText.textContent = summary.position;
+			elements.currentReviewedText.textContent = summary.reviewed;
+			elements.currentCardTimerText.textContent = summary.cardTimer;
+			elements.sessionTimerText.textContent = summary.sessionTimer;
+		};
+
+		browserGlobal.setInterval(refreshCurrentCardSummary, 1000);
+
 		elements.startStudyButton.addEventListener("click", () => {
 			setState(
-				setSessionBoxExpanded(setOverviewVisibility(state, false), false),
+				ensureStudyTimersStarted(
+					setSessionBoxExpanded(setOverviewVisibility(state, false), false),
+				),
 			);
 		});
 
 		elements.overviewToggleButton.addEventListener("click", () => {
 			const nextOverviewVisibility = !state.isOverviewVisible;
+			const nextState = setSessionBoxExpanded(
+				setOverviewVisibility(state, nextOverviewVisibility),
+				false,
+			);
+
 			setState(
-				setSessionBoxExpanded(
-					setOverviewVisibility(state, nextOverviewVisibility),
-					false,
-				),
+				nextOverviewVisibility
+					? nextState
+					: ensureStudyTimersStarted(nextState),
 			);
 		});
 
@@ -681,6 +788,7 @@
 		function selectIndex(nextIndex) {
 			setState({
 				...state,
+				cardStartedAt: nextIndex >= 0 ? Date.now() : null,
 				currentIndex: nextIndex,
 				isBackVisible: false,
 				errorMessage: "",
@@ -902,11 +1010,17 @@
 		canUndoReview,
 		createInitialState,
 		formatCurrentCardLabel,
+		formatElapsedTimer,
 		formatFilterLabel,
 		formatGuideToggleLabel,
+		formatLastReviewedValue,
 		formatProgressText,
+		formatReviewedFilterLabel,
+		formatSessionFilterSummary,
 		formatSessionToggleLabel,
 		formatStackMode,
+		formatTimerText,
+		getCurrentCardSummary,
 		getCurrentCard,
 		getNextReviewMutation,
 		getReviewButtonState,

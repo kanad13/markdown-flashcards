@@ -108,6 +108,7 @@ test("builds the session stack from filter_difficulty and paused cards without s
 	const session = createSessionState(model);
 
 	assert.deepEqual(session.card_ids, ["alpha111", "delta444"]);
+	assert.equal(session.exclude_reviewed_today, false);
 	assert.deepEqual(session.filter_difficulty, [2, 4]);
 	assert.equal(session.shuffle, "no");
 });
@@ -184,7 +185,78 @@ test("shuffles eligible cards when the file-level frontmatter enables shuffle", 
 	});
 
 	assert.deepEqual(session.card_ids, ["gamma333", "beta2222", "alpha111"]);
+	assert.equal(session.exclude_reviewed_today, false);
 	assert.equal(session.shuffle, "yes");
+});
+
+test("exclude_reviewed_today removes cards reviewed on the session-start date without pruning newly reviewed active cards", () => {
+	const model = parseModel(
+		[
+			"```yaml",
+			"exclude_reviewed_today: true",
+			"shuffle: no",
+			"```",
+			"",
+			"<!-- card -->",
+			"",
+			"```yaml",
+			"id: alpha111",
+			"difficulty: 2",
+			"last_reviewed: 2026-04-26",
+			"paused: no",
+			"```",
+			"",
+			"## Front",
+			"",
+			"Alpha",
+			"",
+			"## Back",
+			"",
+			"A",
+			"",
+			"<!-- /card -->",
+			"",
+			"<!-- card -->",
+			"",
+			"```yaml",
+			"id: beta2222",
+			"difficulty: 3",
+			"last_reviewed: 2026-04-25",
+			"paused: no",
+			"```",
+			"",
+			"## Front",
+			"",
+			"Beta",
+			"",
+			"## Back",
+			"",
+			"B",
+			"",
+			"<!-- /card -->",
+			"",
+		].join("\n"),
+	);
+
+	const session = createSessionState(model, {
+		now: () => new Date("2026-04-26T12:00:00.000Z"),
+	});
+
+	assert.deepEqual(session.card_ids, ["beta2222"]);
+	assert.equal(session.exclude_reviewed_today, true);
+
+	const payload = createSessionPayload(model, session, {
+		now: () => new Date("2026-04-26T12:00:00.000Z"),
+	});
+
+	assert.equal(payload.session.exclude_reviewed_today, true);
+	assert.equal(payload.session.total_cards, 1);
+	assert.equal(payload.session.reviewed_today, 0);
+	assert.deepEqual(
+		payload.cards.map((card) => card.id),
+		["beta2222"],
+	);
+	assert.equal(payload.cards[0].last_reviewed, "2026-04-25");
 });
 
 test("computes reviewed_today from the current session cards only", () => {
@@ -261,6 +333,7 @@ test("computes reviewed_today from the current session cards only", () => {
 	});
 
 	assert.equal(payload.session.total_cards, 2);
+	assert.equal(payload.session.exclude_reviewed_today, false);
 	assert.equal(payload.session.reviewed_today, 1);
 	assert.deepEqual(
 		payload.cards.map((card) => card.id),

@@ -1,6 +1,7 @@
 ```yaml
 filter_difficulty: [1, 2, 3, 4, 5]
 shuffle: yes
+exclude_reviewed_today: false
 ```
 
 <!-- card -->
@@ -27,7 +28,7 @@ What is the capital of France?
 ```yaml
 id: e5f6a7b8
 difficulty: 3
-last_reviewed: 2026-04-18
+last_reviewed: 2026-04-26
 paused: no
 ```
 
@@ -50,7 +51,7 @@ What does the `===` operator check in JavaScript?
 
 ```yaml
 id: c9d0e1f2
-difficulty: 4
+difficulty: 3
 last_reviewed: 2026-04-15
 paused: no
 ```

@@ -19,7 +19,24 @@
 					guide</button>
 				<div class="session-summary" id="session-summary">
 					<p class="session-summary-label">Current card</p>
-					<p class="session-summary-value" id="current-card-text" aria-live="polite">Loading session…</p>
+					<dl class="session-summary-metrics" id="session-summary-metrics">
+						<div class="session-summary-metric">
+							<dt>Position</dt>
+							<dd id="current-card-text" aria-live="polite">Loading…</dd>
+						</div>
+						<div class="session-summary-metric">
+							<dt>Last reviewed</dt>
+							<dd id="current-reviewed-text" aria-live="polite">—</dd>
+						</div>
+						<div class="session-summary-metric">
+							<dt>On card</dt>
+							<dd id="current-card-timer-text" aria-live="polite">00:00</dd>
+						</div>
+						<div class="session-summary-metric">
+							<dt>Session</dt>
+							<dd id="session-timer-text" aria-live="polite">00:00</dd>
+						</div>
+					</dl>
 				</div>
 				<button type="button" class="secondary-button shell-toggle" id="session-toggle-button" aria-pressed="false">Show
 					session info</button>
@@ -30,16 +47,12 @@
 					<p class="detail-strip-name">Session info</p>
 					<dl class="session-info-grid" id="session-info-strip">
 						<div class="meta-chip">
-							<dt>File</dt>
-							<dd id="session-source-file">cards.md</dd>
-						</div>
-						<div class="meta-chip">
 							<dt>Order</dt>
 							<dd id="stack-mode">Loading…</dd>
 						</div>
-						<div class="meta-chip meta-chip-filter">
-							<dt>Filter</dt>
-							<dd id="difficulty-filter">—</dd>
+						<div class="meta-chip">
+							<dt>Filters</dt>
+							<dd id="session-filters">—</dd>
 						</div>
 						<div class="meta-chip">
 							<dt>Eligible</dt>
@@ -62,68 +75,60 @@
 			<div class="overview-hero">
 				<div class="overview-copy">
 					<p class="eyebrow">Guide / start page</p>
-					<h1 id="overview-title">Check the guide, then start studying</h1>
+					<h1 id="overview-title">Start with the flow</h1>
 					<p class="lede">
-						This guide shows the active file, the session filters in effect, and the quickest way to use,
-						start, and stop the app before you switch into a more compact study-focused layout.
+						Read this once to understand what the top banner tells you, which controls matter during review, and which
+						<code>cards.md</code> settings shape the next session. Once the flow is clear, jump straight into the deck.
 					</p>
-				</div>
-				<div class="overview-callout">
-					<p class="overview-note">You can reopen this guide later from the compact top bar.</p>
+					<ul class="overview-hero-list">
+						<li>Use <strong>Show session info</strong> above for order, filters, eligible count, and reviewed-today
+							count.</li>
+						<li>Changes to session settings in <code>cards.md</code> apply after restart.</li>
+						<li>Once that context makes sense, press <strong>Start studying</strong> and keep the guide one toggle away.
+						</li>
+					</ul>
 					<button type="button" class="primary-button" id="start-study-button">Start studying</button>
 				</div>
 			</div>
 
-			<div class="overview-grid">
-				<article class="info-card">
-					<h2>Current session</h2>
-					<dl class="overview-facts">
-						<div>
-							<dt>Data file</dt>
-							<dd id="overview-source-file">cards.md</dd>
-						</div>
-						<div>
-							<dt>Difficulty filter</dt>
-							<dd id="overview-difficulty-filter">Loading…</dd>
-						</div>
-						<div>
-							<dt>Order</dt>
-							<dd id="overview-stack-mode">Loading…</dd>
-						</div>
-						<div>
-							<dt>Eligible cards</dt>
-							<dd id="overview-eligible-count">—</dd>
-						</div>
-						<div>
-							<dt>Reviewed today</dt>
-							<dd id="overview-reviewed-today">—</dd>
-						</div>
-					</dl>
+			<div class="overview-sections">
+				<article class="info-card guide-band">
+					<div class="guide-band-heading">
+						<h2>How to use it</h2>
+						<p>Keep the study flow simple and let the top banner carry the live context.</p>
+					</div>
+					<div class="guide-band-content">
+						<ul class="guide-list">
+							<li>Use <strong>Start studying</strong> to enter the compact reader-first layout.</li>
+							<li>The top banner keeps four quick facts together: position, last reviewed, on-card time, and total
+								session time.</li>
+							<li><strong>Reveal answer</strong> shows the back, and <strong>Hide answer</strong> conceals it again.
+							</li>
+							<li>Use <strong>←</strong> / <strong>→</strong> to move, <strong>1–5</strong> to rate difficulty,
+								<strong>Space</strong> / <strong>Enter</strong> to reveal or hide, and <strong>R</strong> to toggle
+								reviewed status.
+							</li>
+							<li>Difficulty and review changes save immediately to <code>cards.md</code>.</li>
+						</ul>
+					</div>
 				</article>
 
-				<article class="info-card">
-					<h2>How to use it</h2>
-					<ol class="guide-list">
-						<li>Use <strong>Start studying</strong> to enter the compact reader-first layout.</li>
-						<li><strong>Reveal answer</strong> shows the back, and <strong>Hide answer</strong> conceals it again.</li>
-						<li>Use <strong>←</strong> / <strong>→</strong> to move, use the <strong>Difficulty</strong> menu or press
-							<strong>1–5</strong> to rate the current card, and use <strong>Space</strong> / <strong>Enter</strong>
-							to reveal or hide the answer, and use <strong>R</strong> to toggle reviewed status.
-						</li>
-						<li>Changing <strong>Difficulty</strong> saves immediately to <code>cards.md</code> on a 1–5 scale.</li>
-						<li>Only the <strong>review</strong> controls update <code>last_reviewed</code>.</li>
-						<li><strong>Previous</strong> and <strong>Next</strong> only navigate the current session stack.</li>
-					</ol>
-				</article>
-
-				<article class="info-card">
-					<h2>Start / stop</h2>
-					<ul class="guide-list command-list">
-						<li><code>npm start</code> runs the app normally.</li>
-						<li><code>npm run dev</code> runs the app with watch mode.</li>
-						<li>Press <code>Ctrl+C</code> in the terminal to stop the app.</li>
-						<li><code>.bak/</code> stores startup backups and <code>logs/</code> stores run logs.</li>
-					</ul>
+				<article class="info-card guide-band">
+					<div class="guide-band-heading">
+						<h2>Configure <code>cards.md</code></h2>
+						<p>These settings shape the next session stack. Keep them small and explicit.</p>
+					</div>
+					<div class="guide-band-content">
+						<ul class="guide-list guide-settings-list">
+							<li><code>filter_difficulty: [1, 2, 3]</code> — include only the listed 1–5 difficulty values.</li>
+							<li><code>shuffle: yes</code> or <code>shuffle: no</code> — choose shuffled order or file order.</li>
+							<li><code>exclude_reviewed_today: true</code> — skip cards already reviewed when the session starts. It
+								defaults to <code>false</code>.</li>
+							<li>Cards reviewed during the current session stay in the active stack even when
+								<code>exclude_reviewed_today</code> is enabled.
+							</li>
+						</ul>
+					</div>
 				</article>
 			</div>
 		</section>
@@ -141,7 +146,7 @@
 						<span class="toolbar-field-label">Difficulty</span>
 						<select id="difficulty-select" name="difficulty" aria-label="Difficulty"></select>
 					</label>
-					<button type="button" class="secondary-button toolbar-button" id="reveal-button"
+					<button type="button" class="primary-button toolbar-button" id="reveal-button"
 						title="Reveal or hide answer (Space or Enter)">Reveal answer</button>
 					<button type="button" class="primary-button toolbar-button" id="review-button"
 						title="Mark as reviewed (R)">Mark as Reviewed</button>
@@ -159,20 +164,12 @@
 				</div>
 
 				<section class="face-panel face-panel-front" id="front-panel">
-					<div class="face-heading-row">
-						<p class="face-kicker">Prompt</p>
-						<h2>Front</h2>
-					</div>
 					<div class="markdown-body" id="front-content"></div>
 				</section>
 
 				<hr class="answer-divider" id="answer-divider" hidden />
 
 				<section class="face-panel face-panel-back" id="back-panel" hidden>
-					<div class="face-heading-row">
-						<p class="face-kicker">Answer</p>
-						<h2>Back</h2>
-					</div>
 					<div class="markdown-body" id="back-content"></div>
 				</section>
 			</section>
