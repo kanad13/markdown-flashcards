@@ -21,6 +21,8 @@ The v1 scope is intentionally narrow:
 - **Frontend:** single-page HTML/CSS/JS served by the Node server
 - **Markdown rendering:** `marked.js` loaded from CDN
 - **HTML sanitization:** `DOMPurify` loaded from CDN
+- **Diagram rendering:** Mermaid loaded from CDN and applied after Markdown render
+- **Math rendering:** KaTeX loaded from CDN and applied after Markdown render
 - **Data store:** `cards.md`
 - **Port:** `54123`
 - **Backups:** `.bak/`, one timestamped backup per server launch
@@ -30,49 +32,32 @@ The v1 scope is intentionally narrow:
 
 ## 3. Core concepts
 
-- **Cards file:** `cards.md` is the canonical storage for both content and managed metadata.
-- **Managed metadata:** the app manages `id`, `difficulty`, `last_reviewed`, and `paused` for each card.
-- **Session:** a session is the filtered and ordered list of eligible cards produced from `cards.md` at load time.
-- **Reviewed today:** the count of cards in the current session whose `last_reviewed` value matches today's date.
+- **Cards file:** `cards.md` is the canonical storage for card content and managed per-card metadata.
+- **Managed metadata:** the app manages `id`, `difficulty`, and `last_reviewed` for each card.
+- **Skip via difficulty `0`:** difficulty `0` means the card is skipped until the user includes `0` in the live difficulty filter again.
+- **Runtime settings:** the browser owns live session settings such as order, reviewed visibility, and visible difficulty levels.
+- **Visible session:** the active session is the ordered subset of cards that matches the current runtime settings.
+- **Reviewed today:** the count of cards in the whole deck whose `last_reviewed` value matches today.
 
 ## 4. Data model and file format
 
-### 4.1 File-level frontmatter
+### 4.1 No file-level session settings
 
-File-level frontmatter controls session behavior and must appear once at the very top of `cards.md`.
+`cards.md` no longer stores session configuration at file scope. Runtime settings live in the UI.
 
-````markdown
-```yaml
-filter_difficulty: [1, 2, 3]
-shuffle: yes
-exclude_reviewed_today: false
-```
-````
-
-| Field                    | Type                    | Description                                                                                                                                        |
-| ------------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `filter_difficulty`      | array of integers (1–5) | Only cards with a matching difficulty are included in the session. Omitting this field includes all difficulties.                                  |
-| `shuffle`                | `yes` / `no`            | `yes` = cards are presented in a random order each session. `no` = cards are presented in file order.                                              |
-| `exclude_reviewed_today` | boolean                 | Defaults to `false`. When `true`, cards whose `last_reviewed` already matches the session-start date are skipped while the session stack is built. |
+Legacy top-of-file YAML blocks may still be present in older decks. The parser may ignore a legacy top YAML block on read, but that block is not part of the active model and is dropped on rewrite.
 
 ### 4.2 Card block format
 
-Each card is wrapped in `<!-- card -->` and `<!-- /card -->`. Inside the block, a fenced `yaml` block holds metadata, followed by `## Front` and `## Back` sections.
+Each card is wrapped in `<!-- card -->` and `<!-- /card -->`. Inside the block, an optional fenced `yaml` block holds metadata, followed by `## Front` and `## Back` sections.
 
 ````markdown
-```yaml
-filter_difficulty: [1, 2, 3]
-shuffle: yes
-exclude_reviewed_today: false
-```
-
 <!-- card -->
 
 ```yaml
 id: a1b2c3
 difficulty: 5
 last_reviewed: 2026-04-25
-paused: no
 ```
 
 ## Front
@@ -90,27 +75,31 @@ Answer text or Markdown here.
 
 ### 4.3 Managed card metadata
 
-| Field           | Type                | Default        | Description                                                                                      |
-| --------------- | ------------------- | -------------- | ------------------------------------------------------------------------------------------------ |
-| `id`            | string (8-char hex) | auto-generated | Unique identifier for the card. Generated once, never overwritten.                               |
-| `difficulty`    | integer (1–5)       | `3`            | User-assigned difficulty label. Used for session filtering.                                      |
-| `last_reviewed` | date (`YYYY-MM-DD`) | today's date   | Set explicitly by the user via "Mark as Reviewed".                                               |
-| `paused`        | `yes` / `no`        | `no`           | `yes` = this card is paused and will not appear in any session, regardless of difficulty filter. |
+| Field           | Type                | Default        | Description                                                        |
+| --------------- | ------------------- | -------------- | ------------------------------------------------------------------ |
+| `id`            | string (8-char hex) | auto-generated | Unique identifier for the card. Generated once, never overwritten. |
+| `difficulty`    | integer (`0–5`)     | `3`            | User-assigned difficulty label. `0` means skipped.                 |
+| `last_reviewed` | date (`YYYY-MM-DD`) | today's date   | Set explicitly by the user via the review action.                  |
+
+Unknown YAML fields are preserved on rewrite.
+
+Legacy fields such as `paused` may still exist in older decks, but they are not managed by the app anymore and do not affect runtime eligibility.
 
 ### 4.4 Parsing rules
 
 The parser must implement the following contract exactly:
 
 1. `cards.md` is parsed as UTF-8 text.
-2. File-level frontmatter appears once, as the first fenced `yaml` code block in the file, before any card blocks.
+2. A single legacy top YAML block may appear before the first card block and should be ignored by the active model.
 3. A card starts on a line containing exactly `<!-- card -->` and ends on a line containing exactly `<!-- /card -->`.
 4. Card blocks cannot be nested, overlapped, or left unclosed.
 5. Inside a card, the first fenced `yaml` block that appears before `## Front` is treated as card metadata. If none exists, metadata starts empty and repair rules apply.
 6. Each card contains exactly one `## Front` section and exactly one `## Back` section, in that order.
 7. Everything between `## Front` and `## Back` belongs to the front body. Everything between `## Back` and `<!-- /card -->` belongs to the back body.
-8. Additional Markdown headings, fenced code blocks, images, and inline HTML are allowed inside front and back content.
-9. Missing or empty managed metadata fields (`id`, `difficulty`, `last_reviewed`, `paused`) are repairable. Structural violations are hard failures.
+8. Additional Markdown headings, fenced code blocks, images, Mermaid fences, inline math, display math, and inline HTML are allowed inside front and back content.
+9. Missing or empty managed metadata fields (`id`, `difficulty`, `last_reviewed`) are repairable. Structural violations are hard failures.
 10. Unknown YAML fields are preserved during rewrites.
+11. Rewrites do not re-emit legacy file-level YAML blocks.
 
 ### 4.5 Keeping the parser and the spec in sync
 
@@ -182,60 +171,85 @@ Example log lines:
 [2026-04-25T14:30:00.260Z] ERROR startup.invalid_card card_index=3 reason="missing ## Back"
 ```
 
-## 6. Session behavior
+## 6. Runtime session behavior
 
-### 6.1 Session creation
+### 6.1 Deck loading
 
-When the app loads a session, it must:
+When the app boots, the server returns the full deck payload. The browser is responsible for deriving the visible session from runtime settings.
 
-- apply `filter_difficulty` if present
-- exclude cards whose `paused` value is `yes`
-- exclude cards already reviewed on the session-start date when `exclude_reviewed_today` is `true`
-- apply `shuffle` ordering after filtering
+The initial live settings are:
 
-The resulting filtered and ordered list is the session stack.
+- order: `shuffle`
+- reviewed visibility: show reviewed-today cards
+- visible difficulties: `1–5`
+- skipped cards (`0`) hidden by default
 
-### 6.2 Session metrics and navigation
+### 6.2 Visible session derivation
 
-- The app tracks a current card index within the session stack.
-- `Previous` and `Next` move within that stack but do not update card fields on their own.
-- `reviewed_today` is computed from cards in the current session only.
-- A card excluded by `exclude_reviewed_today: true` is removed only if it was already reviewed when the session stack was created.
-- Cards that remain in the active session stack do not disappear mid-session after the user marks them reviewed.
+The browser derives the current visible session by:
 
-### 6.3 Card updates
+1. choosing file order or one stable shuffled order
+2. filtering cards by the selected visible difficulty levels
+3. hiding cards reviewed today when reviewed visibility is set to hide
+
+The resulting ordered subset is the active visible session.
+
+### 6.3 Immediate filter application
+
+Runtime setting changes apply immediately.
+
+Examples:
+
+- if the current card has difficulty `3` and the user removes `3` from the visible filter, that card should drop out of the cycle immediately
+- if the current card is marked reviewed while reviewed visibility is set to hide, that card should disappear immediately
+- if difficulty `0` is excluded, cards changed to `0` should disappear immediately
+
+When the current card becomes ineligible, the app should move to the next matching card in the active order, then fall back to the previous matching card if needed. If no cards remain, the empty state should appear.
+
+### 6.4 Navigation and metrics
+
+- The app tracks a current card within the visible session.
+- `Previous` and `Next` move within the visible session but do not update card fields on their own.
+- The visible-session progress bar reflects the current visible position only.
+- the `Ready now` count reflects the current visible session only.
+- `reviewed_today` is computed from the whole deck, even when reviewed cards are currently hidden from the live view.
+- `Skipped cards` reflects the whole deck, not only the visible session.
+
+### 6.5 Card updates
 
 - Changing `difficulty` updates that card in `cards.md` immediately.
-- Marking a card as reviewed sets `last_reviewed` to today's date.
+- Marking a card as reviewed sets `last_reviewed` to today’s date.
 - Review actions are the only UI actions that update `last_reviewed`.
-- The UI may undo a review made during the current browser session by restoring the card's previous `last_reviewed` date.
+- The UI may undo a review made during the current browser session by restoring the card’s previous `last_reviewed` date.
 
 ## 7. User interface contract
 
 ### 7.1 Guide surface
 
 - The app may open on a dismissible guide / start surface before study mode.
-- The persistent session shell may carry current session facts while the guide body focuses on study flow guidance, a concise explanation of the top banner, and configuration help for `cards.md`.
+- The persistent session shell may carry current-card facts while the guide body focuses on study flow guidance and the live runtime controls.
 - The hero area should justify why the guide exists before asking the user to press `Start studying`.
-- The hero may fold short session reminders directly into the main copy rather than using a separate highlighted callout box.
-- The guide should explain that file-level session settings are applied on the next server start / refreshed session rather than hot-reloaded from disk.
+- The guide should explain that runtime settings live in the UI instead of `cards.md` file-level config.
+- The guide should mention difficulty `0` as skip and may mention Mermaid/KaTeX support.
 - Dismissing the guide enters study mode without reloading the page.
 
 ### 7.2 Session shell
 
 - Study mode uses one unified session shell rather than separate permanent session panels.
-- The top bar keeps three items in a stable order: a guide toggle on the left, a current-card summary in the center, and a session-info toggle on the right.
-- The current-card summary should stay visible even when session info is collapsed.
-- The current-card summary should present a clear `Current card` heading and may use four compact values beneath it: position in stack, last reviewed value, current-card timer, and overall session timer.
+- The top bar keeps three items in a stable order: a guide toggle on the left, a current-card summary in the center, and a session-settings toggle on the right.
+- The current-card summary should stay visible even when session settings are collapsed.
+- The current-card summary should present a clear `Current card` heading and may use four compact values beneath it: visible position, last reviewed value, current-card timer, and overall session timer.
 - The overall session timer starts when study mode first opens and keeps running until the page reloads.
 - The current-card timer starts when study mode first opens on the current card and resets when navigation lands on a different card.
 - The guide toggle reads `Show guide` or `Hide guide` depending on state.
-- The session-info toggle reads `Show session info` or `Hide session info` depending on state.
+- The session toggle reads `Show session settings` or `Hide session settings` depending on state.
 - Open and closed states should be visually distinct.
-- When expanded, session information should show session-level facts only, in this order: `Order`, `Filters`, `Eligible`, `Reviewed today`.
-- The `Filters` value should default to `All difficulties` when there is no effective difficulty restriction, including when the configured difficulty list is effectively `1–5`.
-- The `Filters` value should mention the reviewed-today rule only when `exclude_reviewed_today` is enabled; the default inclusion case should stay implicit rather than reading as redundant filler.
-- Expanded session info should avoid redundant app-name, session-title, floating progress summaries, or internal current-card metadata such as raw card IDs.
+- When expanded, the session shell should expose, in one compact and balanced layout:
+  - order controls (`File order`, `Shuffle`)
+  - reviewed visibility controls (`Show reviewed`, `Hide reviewed`)
+  - a multi-select difficulty control for `0–5`
+  - a live summary surface with `Ready now`, `Total cards`, `Reviewed today`, and `Skipped cards`
+- Expanded session settings should avoid redundant app-name, session-title, or raw internal card IDs.
 
 ### 7.3 Study toolbar and card presentation
 
@@ -246,17 +260,18 @@ The resulting filtered and ordered list is the session stack.
 - A thin session-position progress bar sits directly below the toolbar.
 - `Previous` / `Next` should read as one connected navigation control.
 - Toolbar controls should keep stable widths so label changes do not shift neighboring items.
-- The difficulty control uses a clearly labeled compact select with the values `1–5`.
+- The difficulty control uses a clearly labeled select with the values `0–5`, where `0` is labeled as skip, and it should have the same visual weight as the other main toolbar pills.
 - The `Reveal` / `Hide` control should use the same blue-for-off and green-for-on visual state language as the review control.
 - The front and back surfaces should look visually distinct when the answer is revealed, without relying on a dedicated front/back chip in the toolbar.
 - The card surfaces do not need visible `Front` / `Back` or `Prompt` / `Answer` heading rows; the content itself should remain the focus.
-- Keyboard shortcuts should support `←` / `→` for navigation, `1–5` for difficulty, `Space` / `Enter` to reveal and hide, and `R` to toggle reviewed state when undo is available.
+- Keyboard shortcuts should support `←` / `→` for navigation, `0–5` for difficulty, `Space` / `Enter` to reveal and hide, and `R` to toggle reviewed state when undo is available.
 - The review button should visually indicate whether the current card is already reviewed today.
 - Long card content should use normal page scrolling rather than a nested main-content scroller.
+- Markdown, Mermaid diagrams, and KaTeX math should render directly inside the card faces after sanitization.
 
 ### 7.4 Empty state
 
-If the current session has no eligible cards, the UI should show an explicit empty state rather than empty front/back panels.
+If the current visible session has no eligible cards, the UI should show an explicit empty state rather than empty front/back panels.
 
 ## 8. Technical constraints and non-goals
 
@@ -278,46 +293,40 @@ Keep v1 verification mostly in Node so feedback stays fast and deterministic.
    - reject invalid fixtures with clear errors
    - confirm repairable fixtures are rewritten as expected
    - confirm unknown YAML fields survive rewrites
+   - confirm legacy top YAML is ignored on read and dropped on rewrite
 
 2. **Auto-repair tests**
    - fill missing managed metadata
    - never overwrite existing values
    - guarantee unique generated IDs within the file
 
-3. **Session logic tests**
-   - `filter_difficulty` inclusion
-   - `paused: yes` exclusion
-   - `exclude_reviewed_today: true` exclusion at session creation time only
-   - `shuffle: yes` vs `shuffle: no`
-   - correct `reviewed_today` computation
-
-4. **API integration tests**
-   - load the current session
-   - update card difficulty
+3. **API integration tests**
+   - load the full deck payload
+   - update card difficulty, including `0`
    - mark a card as reviewed via `PATCH`
    - confirm each write produces the expected full-file rewrite
 
-5. **Frontend state and shell tests**
-   - guide surface renders expected file/session/help information
+4. **Frontend state and shell tests**
+   - guide surface renders expected runtime-settings guidance
    - dismissing the guide preserves session state
    - session shell show/hide behavior works without losing context
+   - live filter changes immediately update visible cards and current-card selection
    - the current-card summary exposes review-date and timer metadata without resetting during rerenders
-   - study toolbar exposes the required stable-width controls, a labeled 1–5 difficulty select, and the session-position progress bar
-   - the study surfaces remain unlabeled while the reveal control still exposes clear on/off state
+   - study toolbar exposes the required controls, a labeled `0–5` difficulty select, and the session-position progress bar
    - keyboard shortcuts map to navigation, reveal/review, and difficulty updates without hijacking focused form controls
-   - long-card layouts rely on page scrolling rather than a nested main-content scroller
 
-6. **Security tests**
+5. **Rendering and security tests**
    - sanitize rendered output
    - cover obvious XSS payloads such as `<script>`, inline handlers, and `javascript:` links
+   - verify Mermaid and KaTeX assets are wired into the shell
 
-7. **Backup and logging tests**
+6. **Backup and logging tests**
    - create a `.bak/` file on startup
    - preserve exact pre-repair backup contents
    - create logs with expected events
 
 ### 9.2 Test approach
 
-- Prefer Node's built-in test runner and fixtures for most coverage.
+- Prefer Node’s built-in test runner and fixtures for most coverage.
 - Browser automation is optional in v1.
 - If browser automation becomes necessary, prefer a very small Playwright smoke suite over a large E2E suite.

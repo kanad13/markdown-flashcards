@@ -11,16 +11,6 @@ function fixedNow() {
 	return new Date("2026-04-26T12:34:56.789Z");
 }
 
-function createRandomStub(values) {
-	let index = 0;
-
-	return () => {
-		const value = values[index] ?? 0;
-		index += 1;
-		return value;
-	};
-}
-
 async function createTempWorkspace(t) {
 	const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "garbage-04-api-"));
 	t.after(async () => {
@@ -29,7 +19,7 @@ async function createTempWorkspace(t) {
 	return rootDir;
 }
 
-async function startTestServer(t, { cardsSource, shuffleRandom } = {}) {
+async function startTestServer(t, { cardsSource } = {}) {
 	const rootDir = await createTempWorkspace(t);
 	await fs.writeFile(path.join(rootDir, "cards.md"), cardsSource, "utf8");
 
@@ -38,7 +28,6 @@ async function startTestServer(t, { cardsSource, shuffleRandom } = {}) {
 		now: fixedNow,
 		port: 0,
 		quiet: true,
-		shuffleRandom,
 	});
 
 	t.after(async () => {
@@ -66,10 +55,6 @@ async function startTestServer(t, { cardsSource, shuffleRandom } = {}) {
 
 test("startServer rejects with a helpful message when the requested port is already in use", async (t) => {
 	const source = [
-		"```yaml",
-		"shuffle: no",
-		"```",
-		"",
 		"<!-- card -->",
 		"",
 		"## Front",
@@ -142,11 +127,11 @@ test("startServer rejects with a helpful message when the requested port is alre
 	);
 });
 
-test("GET /api/session returns the current filtered session stack and reviewed counter", async (t) => {
+test("GET /api/session returns the full deck payload and deck summary", async (t) => {
 	const source = [
 		"```yaml",
-		"filter_difficulty: [2, 4]",
 		"shuffle: yes",
+		"exclude_reviewed_today: true",
 		"```",
 		"",
 		"<!-- card -->",
@@ -155,7 +140,6 @@ test("GET /api/session returns the current filtered session stack and reviewed c
 		"id: alpha111",
 		"difficulty: 2",
 		"last_reviewed: 2026-04-26",
-		"paused: no",
 		"```",
 		"",
 		"## Front",
@@ -172,118 +156,13 @@ test("GET /api/session returns the current filtered session stack and reviewed c
 		"",
 		"```yaml",
 		"id: beta2222",
-		"difficulty: 3",
-		"last_reviewed: 2026-04-26",
-		"paused: no",
-		"```",
-		"",
-		"## Front",
-		"",
-		"Beta",
-		"",
-		"## Back",
-		"",
-		"B",
-		"",
-		"<!-- /card -->",
-		"",
-		"<!-- card -->",
-		"",
-		"```yaml",
-		"id: gamma333",
-		"difficulty: 4",
+		"difficulty: 0",
 		"last_reviewed: 2026-04-20",
-		"paused: no",
-		"```",
-		"",
-		"## Front",
-		"",
-		"Gamma",
-		"",
-		"## Back",
-		"",
-		"C",
-		"",
-		"<!-- /card -->",
-		"",
-		"<!-- card -->",
-		"",
-		"```yaml",
-		"id: delta444",
-		"difficulty: 4",
-		"last_reviewed: 2026-04-10",
 		"paused: yes",
 		"```",
 		"",
 		"## Front",
 		"",
-		"Delta",
-		"",
-		"## Back",
-		"",
-		"D",
-		"",
-		"<!-- /card -->",
-		"",
-	].join("\n");
-
-	const { baseUrl } = await startTestServer(t, {
-		cardsSource: source,
-		shuffleRandom: createRandomStub([0.1]),
-	});
-
-	const response = await fetch(`${baseUrl}/api/session`);
-	const payload = await response.json();
-
-	assert.equal(response.status, 200);
-	assert.deepEqual(payload.session.card_ids, ["gamma333", "alpha111"]);
-	assert.equal(payload.session.exclude_reviewed_today, false);
-	assert.equal(payload.session.total_cards, 2);
-	assert.equal(payload.session.reviewed_today, 1);
-	assert.equal(payload.session.shuffle, "yes");
-	assert.deepEqual(
-		payload.cards.map((card) => card.id),
-		["gamma333", "alpha111"],
-	);
-});
-
-test("GET /api/session excludes cards already reviewed today when exclude_reviewed_today is true", async (t) => {
-	const source = [
-		"```yaml",
-		"exclude_reviewed_today: true",
-		"shuffle: no",
-		"```",
-		"",
-		"<!-- card -->",
-		"",
-		"```yaml",
-		"id: alpha111",
-		"difficulty: 3",
-		"last_reviewed: 2026-04-26",
-		"paused: no",
-		"```",
-		"",
-		"## Front",
-		"",
-		"Alpha",
-		"",
-		"## Back",
-		"",
-		"A",
-		"",
-		"<!-- /card -->",
-		"",
-		"<!-- card -->",
-		"",
-		"```yaml",
-		"id: beta2222",
-		"difficulty: 4",
-		"last_reviewed: 2026-04-20",
-		"paused: no",
-		"```",
-		"",
-		"## Front",
-		"",
 		"Beta",
 		"",
 		"## Back",
@@ -302,29 +181,25 @@ test("GET /api/session excludes cards already reviewed today when exclude_review
 	const payload = await response.json();
 
 	assert.equal(response.status, 200);
-	assert.deepEqual(payload.session.card_ids, ["beta2222"]);
-	assert.equal(payload.session.exclude_reviewed_today, true);
-	assert.equal(payload.session.total_cards, 1);
-	assert.equal(payload.session.reviewed_today, 0);
+	assert.equal(payload.deck.total_cards, 2);
+	assert.equal(payload.deck.reviewed_today, 1);
+	assert.equal(payload.deck.today, "2026-04-26");
 	assert.deepEqual(
 		payload.cards.map((card) => card.id),
-		["beta2222"],
+		["alpha111", "beta2222"],
 	);
+	assert.equal(payload.cards[1].difficulty, 0);
+	assert.equal("paused" in payload.cards[1], false);
 });
 
 test("PATCH /api/cards/:cardId/difficulty updates the card and rewrites cards.md", async (t) => {
 	const source = [
-		"```yaml",
-		"shuffle: no",
-		"```",
-		"",
 		"<!-- card -->",
 		"",
 		"```yaml",
 		"id: alpha111",
 		"difficulty: 3",
 		"last_reviewed: 2026-04-20",
-		"paused: no",
 		"unknown_field: keep-me",
 		"```",
 		"",
@@ -349,38 +224,35 @@ test("PATCH /api/cards/:cardId/difficulty updates the card and rewrites cards.md
 		headers: {
 			"content-type": "application/json",
 		},
-		body: JSON.stringify({ difficulty: 5 }),
+		body: JSON.stringify({ difficulty: 0 }),
 	});
 	const payload = await response.json();
 
 	assert.equal(response.status, 200);
 	assert.equal(payload.card.id, "alpha111");
-	assert.equal(payload.card.difficulty, 5);
+	assert.equal(payload.card.difficulty, 0);
+	assert.equal(payload.deck.total_cards, 1);
+	assert.equal(payload.deck.reviewed_today, 0);
 
 	const expectedModel = parseCardsFile(source);
-	expectedModel.cards[0].metadata.difficulty = 5;
+	expectedModel.cards[0].metadata.difficulty = 0;
 
 	const rewritten = await fs.readFile(path.join(rootDir, "cards.md"), "utf8");
 	assert.equal(rewritten, serializeCardsFile(expectedModel));
 
 	const reparsed = parseCardsFile(rewritten);
-	assert.equal(reparsed.cards[0].metadata.difficulty, 5);
+	assert.equal(reparsed.cards[0].metadata.difficulty, 0);
 	assert.equal(reparsed.cards[0].metadata.unknown_field, "keep-me");
 });
 
-test("PATCH /api/cards/:cardId/review updates last_reviewed and the reviewed counter", async (t) => {
+test("PATCH /api/cards/:cardId/review updates last_reviewed and the deck summary", async (t) => {
 	const source = [
-		"```yaml",
-		"shuffle: no",
-		"```",
-		"",
 		"<!-- card -->",
 		"",
 		"```yaml",
 		"id: alpha111",
 		"difficulty: 3",
 		"last_reviewed: 2026-04-20",
-		"paused: no",
 		"```",
 		"",
 		"## Front",
@@ -399,7 +271,6 @@ test("PATCH /api/cards/:cardId/review updates last_reviewed and the reviewed cou
 		"id: beta2222",
 		"difficulty: 4",
 		"last_reviewed: 2026-04-20",
-		"paused: no",
 		"```",
 		"",
 		"## Front",
@@ -425,7 +296,8 @@ test("PATCH /api/cards/:cardId/review updates last_reviewed and the reviewed cou
 
 	assert.equal(response.status, 200);
 	assert.equal(payload.card.last_reviewed, "2026-04-26");
-	assert.equal(payload.session.reviewed_today, 1);
+	assert.equal(payload.deck.reviewed_today, 1);
+	assert.equal(payload.deck.total_cards, 2);
 
 	const expectedModel = parseCardsFile(source);
 	expectedModel.cards[0].metadata.last_reviewed = "2026-04-26";
@@ -435,23 +307,18 @@ test("PATCH /api/cards/:cardId/review updates last_reviewed and the reviewed cou
 
 	const sessionResponse = await fetch(`${baseUrl}/api/session`);
 	const sessionPayload = await sessionResponse.json();
-	assert.equal(sessionPayload.session.reviewed_today, 1);
+	assert.equal(sessionPayload.deck.reviewed_today, 1);
 	assert.equal(sessionPayload.cards[0].last_reviewed, "2026-04-26");
 });
 
 test("PATCH /api/cards/:cardId/review with reviewed false restores the previous review date", async (t) => {
 	const source = [
-		"```yaml",
-		"shuffle: no",
-		"```",
-		"",
 		"<!-- card -->",
 		"",
 		"```yaml",
 		"id: alpha111",
 		"difficulty: 3",
 		"last_reviewed: 2026-04-20",
-		"paused: no",
 		"```",
 		"",
 		"## Front",
@@ -488,7 +355,8 @@ test("PATCH /api/cards/:cardId/review with reviewed false restores the previous 
 
 	assert.equal(response.status, 200);
 	assert.equal(payload.card.last_reviewed, "2026-04-20");
-	assert.equal(payload.session.reviewed_today, 0);
+	assert.equal(payload.deck.reviewed_today, 0);
+	assert.equal(payload.deck.total_cards, 1);
 
 	const rewritten = await fs.readFile(path.join(rootDir, "cards.md"), "utf8");
 	assert.equal(rewritten, source);

@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-test("frontend shell loads marked and DOMPurify from CDNs and exposes the corner-anchored show-hide shell plus stable toolbar", () => {
+test("frontend shell loads markdown, mermaid, and KaTeX assets and exposes the live settings shell", () => {
 	const html = fs.readFileSync(
 		path.join(__dirname, "..", "public", "index.html"),
 		"utf8",
@@ -11,12 +11,22 @@ test("frontend shell loads marked and DOMPurify from CDNs and exposes the corner
 
 	assert.match(html, /marked/i);
 	assert.match(html, /dompurify|purify/i);
+	assert.match(html, /mermaid/i);
+	assert.match(html, /katex/i);
 	assert.match(html, /id="session-shell"/);
 	assert.match(html, /id="session-shell-controls"/);
 	assert.match(html, /id="session-toggle-button"/);
 	assert.match(html, /id="session-shell-body"/);
-	assert.match(html, /id="session-info-strip"/);
-	assert.match(html, /id="session-summary"/);
+	assert.match(html, /id="session-settings-grid"/);
+	assert.match(html, /id="order-file-button"/);
+	assert.match(html, /id="order-shuffle-button"/);
+	assert.match(html, /id="reviewed-show-button"/);
+	assert.match(html, /id="reviewed-hide-button"/);
+	assert.match(html, /id="difficulty-filter-group"/);
+	assert.match(html, /data-difficulty-filter/);
+	assert.match(html, /id="visible-count"/);
+	assert.match(html, /id="deck-count"/);
+	assert.match(html, /id="skipped-count"/);
 	assert.match(html, /id="current-card-text"/);
 	assert.match(html, /id="current-reviewed-text"/);
 	assert.match(html, /id="current-card-timer-text"/);
@@ -36,68 +46,43 @@ test("frontend shell loads marked and DOMPurify from CDNs and exposes the corner
 	assert.match(html, /id="review-button"/);
 	assert.match(html, /id="previous-button"/);
 	assert.match(html, /id="next-button"/);
-	assert.match(html, /id="session-filters"/);
-	assert.match(html, /aria-keyshortcuts="ArrowLeft"/);
-	assert.match(html, /aria-keyshortcuts="ArrowRight"/);
 	assert.match(html, />Hide\s+guide</);
-	assert.match(html, />Show\s+session info</);
+	assert.match(html, />Show\s+session settings</);
 	assert.match(html, /aria-pressed="true">Hide\s+guide/);
-	assert.match(html, /aria-pressed="false">Show\s+session info/);
+	assert.match(html, /aria-pressed="false">Show\s+session settings/);
 	assert.match(html, />Current card</);
-	assert.match(html, />Order</);
-	assert.match(html, />Filters</);
-	assert.match(html, />Eligible</);
+	assert.match(html, />Ready now</);
+	assert.match(html, />Total cards</);
 	assert.match(html, />Reviewed today</);
+	assert.match(html, />Skipped cards</);
+	assert.match(html, />Session snapshot</);
+	assert.match(
+		html,
+		/Ready now follows your live filters\. Reviewed and skipped totals cover the whole deck\./,
+	);
 	assert.match(html, />Position</);
 	assert.match(html, />Last reviewed</);
 	assert.match(html, />On card</);
 	assert.match(html, />Session</);
-	assert.doesNotMatch(html, /id="session-source-file"/);
+	assert.match(html, /Skip \(0\)/);
+	assert.match(html, /Study with live controls/i);
+	assert.match(html, /What does the `===` operator check in JavaScript\?/);
+	assert.match(html, /Strict equality — it compares both value and type\./);
+	assert.doesNotMatch(html, /Render this diagram:/);
 	assert.match(
 		html,
-		/Space<\/strong>\s*\/\s*<strong>Enter<\/strong>\s+to reveal or hide/i,
+		/session panel now owns order, reviewed visibility, and difficulty filters/i,
 	);
-	assert.match(html, /<strong>R<\/strong>\s+to toggle\s+reviewed status/i);
-	assert.match(html, /exclude_reviewed_today/i);
-	assert.match(html, /Start with the flow/i);
-	assert.match(
-		html,
-		/Read this once to understand what the top banner tells you/i,
-	);
-	assert.match(
-		html,
-		/Show session info<\/strong> above for order, filters, eligible count, and reviewed-today count/i,
-	);
-	assert.match(
-		html,
-		/Start studying<\/strong> and keep the guide one toggle away/i,
-	);
-	assert.match(html, /guide-band/i);
-	assert.doesNotMatch(html, /Before you start/i);
-	assert.doesNotMatch(html, /id="session-details-panel"/);
-	assert.doesNotMatch(html, /id="summary-strip"/);
-	assert.doesNotMatch(html, /id="content-scroller"/);
-	assert.doesNotMatch(html, /id="action-bar"/);
-	assert.doesNotMatch(html, /id="study-action-row"/);
-	assert.doesNotMatch(html, /id="session-app-group"/);
-	assert.doesNotMatch(html, /id="session-heading"/);
-	assert.doesNotMatch(html, /id="navigation-pod"/);
-	assert.doesNotMatch(html, /id="card-side-label"/);
-	assert.doesNotMatch(html, /id="current-card-strip"/);
-	assert.doesNotMatch(html, /class="face-heading-row"/);
-	assert.doesNotMatch(html, /class="face-kicker"/);
-	assert.doesNotMatch(html, /id="overview-source-file"/);
-	assert.doesNotMatch(html, /id="overview-session-filters"/);
-	assert.doesNotMatch(html, /id="overview-stack-mode"/);
-	assert.doesNotMatch(html, /id="overview-eligible-count"/);
-	assert.doesNotMatch(html, /id="overview-reviewed-today"/);
-	assert.doesNotMatch(html, /Navigate/);
-	assert.doesNotMatch(html, /Actions/);
-	assert.doesNotMatch(html, /LOCAL-FIRST STUDY SESSION/);
+	assert.match(html, /0–5/);
+	assert.match(html, /Mermaid/i);
+	assert.match(html, /KaTeX/i);
+	assert.doesNotMatch(html, /id="session-filters"/);
+	assert.doesNotMatch(html, /id="stack-mode"/);
+	assert.doesNotMatch(html, /id="eligible-count"/);
+	assert.doesNotMatch(html, /filter_difficulty/i);
+	assert.doesNotMatch(html, /exclude_reviewed_today/i);
 	assert.doesNotMatch(
 		html,
-		/<p class="app-name">Local Markdown Flashcards<\/p>/,
+		/Changes to session settings in <code>cards\.md<\/code> apply after restart/i,
 	);
-	assert.doesNotMatch(html, /npm start/);
-	assert.doesNotMatch(html, /Ctrl\+C/);
 });

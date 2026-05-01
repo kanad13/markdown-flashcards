@@ -1,4 +1,4 @@
-const DIFFICULTY_MIN = 1;
+const DIFFICULTY_MIN = 0;
 const DIFFICULTY_MAX = 5;
 const DEFAULT_DIFFICULTY = 3;
 

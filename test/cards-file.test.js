@@ -15,12 +15,10 @@ function readFixture(type, filename) {
 	return fs.readFileSync(path.join(fixtureRoot, type, filename), "utf8");
 }
 
-test("parses file-level frontmatter and card metadata from a valid cards file", () => {
+test("parses card metadata from a valid cards file without requiring file-level settings", () => {
 	const parsed = parseCardsFile(readFixture("valid", "basic.cards.md"));
 
-	assert.deepEqual(parsed.frontmatter.filter_difficulty, [1, 2, 3]);
-	assert.equal(parsed.frontmatter.shuffle, "yes");
-	assert.equal(parsed.frontmatter.custom_setting, "keep-me");
+	assert.equal(parsed.frontmatter, undefined);
 	assert.equal(parsed.cards.length, 1);
 	assert.equal(parsed.cards[0].metadata.id, "abcdef12");
 	assert.equal(parsed.cards[0].metadata.last_reviewed, "2026-04-25");
@@ -39,25 +37,112 @@ test("parses cards without metadata and ignores section-looking headings inside 
 	assert.match(parsed.cards[0].back, /Still valid\./);
 });
 
-test("round-trips unchanged valid files and preserves unknown YAML fields on rewrite", () => {
+test("parses mermaid, math, and heading-like fenced content inside card faces without confusing sections", () => {
+	const source = [
+		"<!-- card -->",
+		"",
+		"```yaml",
+		"id: facefeed",
+		"difficulty: 4",
+		"last_reviewed: 2026-04-26",
+		"```",
+		"",
+		"## Front",
+		"",
+		"Study this flow and formula:",
+		"",
+		"```mermaid",
+		"flowchart LR",
+		"  Prompt --> Answer",
+		"```",
+		"",
+		"$$",
+		"x^2 + y^2 = z^2",
+		"$$",
+		"",
+		"```md",
+		"## Back is part of this code fence",
+		"```",
+		"",
+		"## Back",
+		"",
+		"Here is inline math: $e^{i\\pi} + 1 = 0$.",
+		"",
+		"```mermaid",
+		"sequenceDiagram",
+		"  learner->>deck: review()",
+		"```",
+		"",
+		"<!-- /card -->",
+		"",
+	].join("\n");
+
+	const parsed = parseCardsFile(source);
+
+	assert.equal(parsed.cards.length, 1);
+	assert.match(parsed.cards[0].front, /```mermaid/);
+	assert.match(parsed.cards[0].front, /\$\$/);
+	assert.match(parsed.cards[0].front, /## Back is part of this code fence/);
+	assert.match(parsed.cards[0].back, /e\^\{i\\pi\}/);
+	assert.match(parsed.cards[0].back, /```mermaid/);
+	assert.equal(serializeCardsFile(parsed), source);
+});
+
+test("round-trips unchanged card-only files and preserves unknown YAML fields on rewrite", () => {
 	const source = readFixture("valid", "basic.cards.md");
 	const parsed = parseCardsFile(source);
 
 	assert.equal(serializeCardsFile(parsed), source);
 
-	parsed.frontmatter.shuffle = "no";
 	parsed.cards[0].metadata.difficulty = 5;
 
 	const reparsed = parseCardsFile(serializeCardsFile(parsed));
-	assert.equal(reparsed.frontmatter.custom_setting, "keep-me");
-	assert.equal(reparsed.frontmatter.shuffle, "no");
 	assert.equal(reparsed.cards[0].metadata.note, "keep me");
 	assert.deepEqual(reparsed.cards[0].metadata.tags, ["alpha", "beta"]);
 	assert.equal(reparsed.cards[0].metadata.difficulty, 5);
 });
 
+test("drops a legacy file-level yaml block on rewrite while keeping the card data", () => {
+	const source = [
+		"```yaml",
+		"shuffle: yes",
+		"filter_difficulty: [2, 4]",
+		"```",
+		"",
+		"<!-- card -->",
+		"",
+		"```yaml",
+		"id: abcdef12",
+		"difficulty: 4",
+		"last_reviewed: 2026-04-25",
+		"extra_field: keep-me",
+		"```",
+		"",
+		"## Front",
+		"",
+		"Question",
+		"",
+		"## Back",
+		"",
+		"Answer",
+		"",
+		"<!-- /card -->",
+		"",
+	].join("\n");
+
+	const parsed = parseCardsFile(source);
+	const serialized = serializeCardsFile(parsed);
+
+	assert.doesNotMatch(serialized, /filter_difficulty|shuffle/);
+	assert.match(serialized, /extra_field: keep-me/);
+
+	const reparsed = parseCardsFile(serialized);
+	assert.equal(reparsed.cards[0].metadata.extra_field, "keep-me");
+	assert.equal(reparsed.cards[0].metadata.difficulty, 4);
+});
+
 for (const [filename, expectedMessage] of [
-	["frontmatter-not-top.cards.md", /frontmatter/i],
+	["frontmatter-not-top.cards.md", /unexpected content/i],
 	["nested-card.cards.md", /nested|overlapped/i],
 	["stray-closing.cards.md", /closing card marker/i],
 	["unclosed-card.cards.md", /never closed/i],

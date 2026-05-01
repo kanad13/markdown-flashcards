@@ -13,23 +13,17 @@ This file is the current work queue derived from `spec.md`. Keep it focused on t
 
 ### 1. Deepen rendering and sanitization confidence
 
-- [ ] Add explicit XSS regression coverage for rendered markdown, including `<script>`, inline handlers, and `javascript:` links
-- [ ] Review remaining DOM insertion points and keep sanitization expectations explicit in tests
-- [ ] Decide whether additional sanitization fixtures belong under `test/fixtures/`
+- [ ] Add explicit XSS regression coverage for rendered Markdown, including `<script>`, inline handlers, and `javascript:` links
+- [ ] Add at least one focused test around Mermaid and KaTeX enhancement hooks beyond shell wiring
+- [ ] Decide whether any additional sanitization fixtures belong under `test/fixtures/`
 
-### 2. Expand parser repair coverage
+### 2. Validate the new live-session controls on a larger deck
 
-- [ ] Add repairable fixtures for missing managed metadata fields
-- [ ] Assert repaired output exactly matches expected rewrites
-- [ ] Keep parser, fixtures, and `spec.md` in sync for any format adjustments
+- [ ] Smoke test live difficulty filtering, reviewed visibility, and difficulty `0` against a larger real deck
+- [ ] Decide whether runtime settings should remain per-load only or persist locally in the browser later
+- [ ] Re-evaluate whether the stable shuffled order needs an explicit `Reshuffle` action after real usage feedback
 
-### 3. Validate the new study controls
-
-- [ ] Smoke test the 1–5 difficulty migration against a larger real deck
-- [ ] Decide whether the compact toolbar needs inline shortcut hints beyond the guide copy
-- [ ] Re-evaluate optional extras like Escape-to-hide or Zen mode only after real usage feedback
-
-### 4. Increase confidence only if needed
+### 3. Increase confidence only if needed
 
 - [ ] Add a tiny browser smoke suite only if Node-level tests stop being enough
 - [ ] Re-evaluate atomic temp-file replacement only if failure data justifies the added complexity

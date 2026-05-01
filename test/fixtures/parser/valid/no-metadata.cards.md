@@ -1,7 +1,3 @@
-```yaml
-shuffle: no
-```
-
 <!-- card -->
 
 ## Front

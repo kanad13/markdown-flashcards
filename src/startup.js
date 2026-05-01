@@ -241,11 +241,6 @@ function repairCardsModel(
 			added.push("last_reviewed");
 		}
 
-		if (isMissingValue(metadata.paused)) {
-			metadata.paused = "no";
-			added.push("paused");
-		}
-
 		if (added.length === 0) {
 			return card;
 		}

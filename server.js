@@ -5,8 +5,7 @@ const express = require("express");
 const { initializeCardsRepository } = require("./src/startup");
 const {
 	SessionStateError,
-	createSessionPayload,
-	createSessionState,
+	createDeckPayload,
 	getCardById,
 	markCardReviewed,
 	setCardLastReviewed,
@@ -31,7 +30,6 @@ function createApp({
 		cardsFilePath: repositoryState.cardsFilePath,
 		model: repositoryState.model,
 		now,
-		session: repositoryState.session,
 	};
 
 	app.use("/assets", express.static(path.join(rootDir, "assets")));
@@ -40,7 +38,7 @@ function createApp({
 	app.get("/api/session", (request, response) => {
 		const runtimeState = request.app.locals.runtimeState;
 		response.json(
-			createSessionPayload(runtimeState.model, runtimeState.session, {
+			createDeckPayload(runtimeState.model, {
 				now: runtimeState.now,
 			}),
 		);
@@ -66,13 +64,9 @@ function createApp({
 					card: toApiCard(
 						getCardById(runtimeState.model, request.params.cardId).card,
 					),
-					session: createSessionPayload(
-						runtimeState.model,
-						runtimeState.session,
-						{
-							now: runtimeState.now,
-						},
-					).session,
+					deck: createDeckPayload(runtimeState.model, {
+						now: runtimeState.now,
+					}).deck,
 				});
 			} catch (error) {
 				next(error);
@@ -103,13 +97,9 @@ function createApp({
 				card: toApiCard(
 					getCardById(runtimeState.model, request.params.cardId).card,
 				),
-				session: createSessionPayload(
-					runtimeState.model,
-					runtimeState.session,
-					{
-						now: runtimeState.now,
-					},
-				).session,
+				deck: createDeckPayload(runtimeState.model, {
+					now: runtimeState.now,
+				}).deck,
 			});
 		} catch (error) {
 			next(error);
@@ -159,10 +149,6 @@ async function startServer({
 	});
 	const repositoryState = {
 		...startupState,
-		session: createSessionState(startupState.model, {
-			random: shuffleRandom,
-			now,
-		}),
 	};
 	const app = createApp({
 		rootDir,

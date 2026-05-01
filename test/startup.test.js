@@ -190,11 +190,6 @@ test("startup hard-fails on structural card violations and logs the invalid card
 test("startup repairs missing managed metadata, preserves unknown fields, and writes repair logs", async (t) => {
 	const rootDir = await createTempWorkspace(t);
 	const source = [
-		"```yaml",
-		"shuffle: yes",
-		"filter_difficulty: [3, 5]",
-		"```",
-		"",
 		"<!-- card -->",
 		"",
 		"## Front",
@@ -213,7 +208,6 @@ test("startup repairs missing managed metadata, preserves unknown fields, and wr
 		"id: deadbeef",
 		"difficulty: 3",
 		"last_reviewed:",
-		"paused:",
 		"extra_field: keep-me",
 		"```",
 		"",
@@ -233,7 +227,6 @@ test("startup repairs missing managed metadata, preserves unknown fields, and wr
 		"id:",
 		"difficulty:",
 		"last_reviewed:",
-		"paused:",
 		"```",
 		"",
 		"## Front",
@@ -266,22 +259,18 @@ test("startup repairs missing managed metadata, preserves unknown fields, and wr
 	);
 	const repaired = parseCardsFile(repairedContents);
 
-	assert.deepEqual(repaired.frontmatter.filter_difficulty, [3, 5]);
 	assert.equal(repaired.cards[0].metadata.id, "11223344");
 	assert.equal(repaired.cards[0].metadata.difficulty, 3);
 	assert.equal(repaired.cards[0].metadata.last_reviewed, "2026-04-26");
-	assert.equal(repaired.cards[0].metadata.paused, "no");
 
 	assert.equal(repaired.cards[1].metadata.id, "deadbeef");
 	assert.equal(repaired.cards[1].metadata.difficulty, 3);
 	assert.equal(repaired.cards[1].metadata.last_reviewed, "2026-04-26");
-	assert.equal(repaired.cards[1].metadata.paused, "no");
 	assert.equal(repaired.cards[1].metadata.extra_field, "keep-me");
 
 	assert.equal(repaired.cards[2].metadata.id, "55667788");
 	assert.equal(repaired.cards[2].metadata.difficulty, 3);
 	assert.equal(repaired.cards[2].metadata.last_reviewed, "2026-04-26");
-	assert.equal(repaired.cards[2].metadata.paused, "no");
 
 	const backupContents = await fs.readFile(
 		path.join(rootDir, ".bak", FIXED_BACKUP_NAME),
@@ -292,15 +281,15 @@ test("startup repairs missing managed metadata, preserves unknown fields, and wr
 	const logContents = await readLog(rootDir);
 	assert.match(
 		logContents,
-		/INFO repair\.card card_index=1 card_id=11223344 added=id,difficulty,last_reviewed,paused/,
+		/INFO repair\.card card_index=1 card_id=11223344 added=id,difficulty,last_reviewed/,
 	);
 	assert.match(
 		logContents,
-		/INFO repair\.card card_index=2 card_id=deadbeef added=last_reviewed,paused/,
+		/INFO repair\.card card_index=2 card_id=deadbeef added=last_reviewed/,
 	);
 	assert.match(
 		logContents,
-		/INFO repair\.card card_index=3 card_id=55667788 added=id,difficulty,last_reviewed,paused/,
+		/INFO repair\.card card_index=3 card_id=55667788 added=id,difficulty,last_reviewed/,
 	);
 	assert.match(
 		logContents,

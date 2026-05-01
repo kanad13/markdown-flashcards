@@ -16,75 +16,24 @@ class SessionStateError extends Error {
 	}
 }
 
-function createSessionState(
-	model,
-	{ random = Math.random, now = () => new Date() } = {},
-) {
-	const filterDifficulty = normalizeDifficultyFilter(
-		model?.frontmatter?.filter_difficulty,
-	);
-	const excludeReviewedToday =
-		model?.frontmatter?.exclude_reviewed_today === true;
-	const shuffle = model?.frontmatter?.shuffle === "yes" ? "yes" : "no";
+function createDeckPayload(model, { now = () => new Date() } = {}) {
+	const cards = Array.isArray(model?.cards) ? model.cards : [];
 	const today = formatCalendarDate(now());
 
-	let cards = Array.isArray(model?.cards) ? model.cards.slice() : [];
-	cards = cards.filter(
-		(card) =>
-			!isCardPaused(card?.metadata?.paused) &&
-			matchesDifficulty(card, filterDifficulty) &&
-			matchesReviewedTodayFilter(card, excludeReviewedToday, today),
-	);
-
-	if (shuffle === "yes") {
-		cards = shuffleCards(cards, random);
-	}
-
 	return {
-		card_ids: cards.map((card) => card.metadata.id),
-		exclude_reviewed_today: excludeReviewedToday,
-		filter_difficulty: filterDifficulty,
-		shuffle,
-	};
-}
-
-function createSessionPayload(
-	model,
-	sessionState,
-	{ now = () => new Date() } = {},
-) {
-	const cards = getSessionCards(model, sessionState);
-	const today = formatCalendarDate(now());
-	const reviewedToday = cards.filter(
-		(card) => card?.metadata?.last_reviewed === today,
-	).length;
-
-	return {
-		session: {
-			card_ids: sessionState.card_ids.slice(),
-			exclude_reviewed_today: sessionState.exclude_reviewed_today === true,
-			filter_difficulty: Array.isArray(sessionState.filter_difficulty)
-				? sessionState.filter_difficulty.slice()
-				: null,
-			shuffle: sessionState.shuffle,
+		deck: {
 			total_cards: cards.length,
-			reviewed_today: reviewedToday,
+			reviewed_today: countReviewedToday(cards, today),
+			today,
 		},
 		cards: cards.map(toApiCard),
 	};
 }
 
-function getSessionCards(model, sessionState) {
-	const cardsById = new Map(
-		(Array.isArray(model?.cards) ? model.cards : []).map((card) => [
-			String(card?.metadata?.id),
-			card,
-		]),
-	);
-
-	return (sessionState?.card_ids ?? [])
-		.map((cardId) => cardsById.get(String(cardId)))
-		.filter(Boolean);
+function countReviewedToday(cards, today) {
+	return (Array.isArray(cards) ? cards : []).filter(
+		(card) => card?.metadata?.last_reviewed === today,
+	).length;
 }
 
 function updateCardDifficulty(model, cardId, difficulty) {
@@ -159,7 +108,6 @@ function toApiCard(card) {
 		id: card.metadata.id,
 		difficulty: card.metadata.difficulty,
 		last_reviewed: card.metadata.last_reviewed,
-		paused: card.metadata.paused,
 		front: card.front,
 		back: card.back,
 	};
@@ -202,60 +150,12 @@ function validateCalendarDate(lastReviewed) {
 	}
 }
 
-function normalizeDifficultyFilter(filterDifficulty) {
-	if (!Array.isArray(filterDifficulty)) {
-		return null;
-	}
-
-	const normalized = filterDifficulty
-		.map((value) => Number(value))
-		.filter((value, index, values) => {
-			return isCurrentDifficulty(value) && values.indexOf(value) === index;
-		});
-
-	return normalized.length > 0 ? normalized : null;
-}
-
-function matchesDifficulty(card, filterDifficulty) {
-	if (filterDifficulty === null) {
-		return true;
-	}
-
-	const difficulty = Number(card?.metadata?.difficulty);
-	return filterDifficulty.includes(difficulty);
-}
-
-function matchesReviewedTodayFilter(card, excludeReviewedToday, today) {
-	if (!excludeReviewedToday) {
-		return true;
-	}
-
-	return card?.metadata?.last_reviewed !== today;
-}
-
-function isCardPaused(paused) {
-	return paused === "yes";
-}
-
-function shuffleCards(cards, random) {
-	const shuffled = cards.slice();
-
-	for (let index = shuffled.length - 1; index > 0; index -= 1) {
-		const swapIndex = Math.floor(random() * (index + 1));
-		const current = shuffled[index];
-		shuffled[index] = shuffled[swapIndex];
-		shuffled[swapIndex] = current;
-	}
-
-	return shuffled;
-}
-
 module.exports = {
 	SessionStateError,
-	createSessionPayload,
-	createSessionState,
+	countReviewedToday,
+	createDeckPayload,
+	createSessionPayload: createDeckPayload,
 	getCardById,
-	getSessionCards,
 	markCardReviewed,
 	setCardLastReviewed,
 	toApiCard,

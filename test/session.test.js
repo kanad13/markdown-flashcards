@@ -2,37 +2,25 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const { parseCardsFile } = require("../src/cards-file");
-const { createSessionPayload, createSessionState } = require("../src/session");
+const {
+	createDeckPayload,
+	markCardReviewed,
+	updateCardDifficulty,
+} = require("../src/session");
 
 function parseModel(source) {
 	return parseCardsFile(source);
 }
 
-function createRandomStub(values) {
-	let index = 0;
-
-	return () => {
-		const value = values[index] ?? 0;
-		index += 1;
-		return value;
-	};
-}
-
-test("builds the session stack from filter_difficulty and paused cards without shuffling when shuffle is no", () => {
+test("createDeckPayload returns the full deck and counts cards reviewed today", () => {
 	const model = parseModel(
 		[
-			"```yaml",
-			"filter_difficulty: [2, 4]",
-			"shuffle: no",
-			"```",
-			"",
 			"<!-- card -->",
 			"",
 			"```yaml",
 			"id: alpha111",
 			"difficulty: 2",
-			"last_reviewed: 2026-04-20",
-			"paused: no",
+			"last_reviewed: 2026-04-26",
 			"```",
 			"",
 			"## Front",
@@ -49,184 +37,13 @@ test("builds the session stack from filter_difficulty and paused cards without s
 			"",
 			"```yaml",
 			"id: beta2222",
-			"difficulty: 3",
-			"last_reviewed: 2026-04-21",
-			"paused: no",
-			"```",
-			"",
-			"## Front",
-			"",
-			"Beta",
-			"",
-			"## Back",
-			"",
-			"B",
-			"",
-			"<!-- /card -->",
-			"",
-			"<!-- card -->",
-			"",
-			"```yaml",
-			"id: gamma333",
-			"difficulty: 4",
-			"last_reviewed: 2026-04-22",
+			"difficulty: 0",
+			"last_reviewed: 2026-04-20",
 			"paused: yes",
 			"```",
 			"",
 			"## Front",
 			"",
-			"Gamma",
-			"",
-			"## Back",
-			"",
-			"C",
-			"",
-			"<!-- /card -->",
-			"",
-			"<!-- card -->",
-			"",
-			"```yaml",
-			"id: delta444",
-			"difficulty: 4",
-			"last_reviewed: 2026-04-23",
-			"paused: no",
-			"```",
-			"",
-			"## Front",
-			"",
-			"Delta",
-			"",
-			"## Back",
-			"",
-			"D",
-			"",
-			"<!-- /card -->",
-			"",
-		].join("\n"),
-	);
-
-	const session = createSessionState(model);
-
-	assert.deepEqual(session.card_ids, ["alpha111", "delta444"]);
-	assert.equal(session.exclude_reviewed_today, false);
-	assert.deepEqual(session.filter_difficulty, [2, 4]);
-	assert.equal(session.shuffle, "no");
-});
-
-test("shuffles eligible cards when the file-level frontmatter enables shuffle", () => {
-	const model = parseModel(
-		[
-			"```yaml",
-			"shuffle: yes",
-			"```",
-			"",
-			"<!-- card -->",
-			"",
-			"```yaml",
-			"id: alpha111",
-			"difficulty: 1",
-			"last_reviewed: 2026-04-20",
-			"paused: no",
-			"```",
-			"",
-			"## Front",
-			"",
-			"Alpha",
-			"",
-			"## Back",
-			"",
-			"A",
-			"",
-			"<!-- /card -->",
-			"",
-			"<!-- card -->",
-			"",
-			"```yaml",
-			"id: beta2222",
-			"difficulty: 2",
-			"last_reviewed: 2026-04-20",
-			"paused: no",
-			"```",
-			"",
-			"## Front",
-			"",
-			"Beta",
-			"",
-			"## Back",
-			"",
-			"B",
-			"",
-			"<!-- /card -->",
-			"",
-			"<!-- card -->",
-			"",
-			"```yaml",
-			"id: gamma333",
-			"difficulty: 3",
-			"last_reviewed: 2026-04-20",
-			"paused: no",
-			"```",
-			"",
-			"## Front",
-			"",
-			"Gamma",
-			"",
-			"## Back",
-			"",
-			"C",
-			"",
-			"<!-- /card -->",
-			"",
-		].join("\n"),
-	);
-
-	const session = createSessionState(model, {
-		random: createRandomStub([0.1, 0.9]),
-	});
-
-	assert.deepEqual(session.card_ids, ["gamma333", "beta2222", "alpha111"]);
-	assert.equal(session.exclude_reviewed_today, false);
-	assert.equal(session.shuffle, "yes");
-});
-
-test("exclude_reviewed_today removes cards reviewed on the session-start date without pruning newly reviewed active cards", () => {
-	const model = parseModel(
-		[
-			"```yaml",
-			"exclude_reviewed_today: true",
-			"shuffle: no",
-			"```",
-			"",
-			"<!-- card -->",
-			"",
-			"```yaml",
-			"id: alpha111",
-			"difficulty: 2",
-			"last_reviewed: 2026-04-26",
-			"paused: no",
-			"```",
-			"",
-			"## Front",
-			"",
-			"Alpha",
-			"",
-			"## Back",
-			"",
-			"A",
-			"",
-			"<!-- /card -->",
-			"",
-			"<!-- card -->",
-			"",
-			"```yaml",
-			"id: beta2222",
-			"difficulty: 3",
-			"last_reviewed: 2026-04-25",
-			"paused: no",
-			"```",
-			"",
-			"## Front",
-			"",
 			"Beta",
 			"",
 			"## Back",
@@ -238,42 +55,30 @@ test("exclude_reviewed_today removes cards reviewed on the session-start date wi
 		].join("\n"),
 	);
 
-	const session = createSessionState(model, {
+	const payload = createDeckPayload(model, {
 		now: () => new Date("2026-04-26T12:00:00.000Z"),
 	});
 
-	assert.deepEqual(session.card_ids, ["beta2222"]);
-	assert.equal(session.exclude_reviewed_today, true);
-
-	const payload = createSessionPayload(model, session, {
-		now: () => new Date("2026-04-26T12:00:00.000Z"),
-	});
-
-	assert.equal(payload.session.exclude_reviewed_today, true);
-	assert.equal(payload.session.total_cards, 1);
-	assert.equal(payload.session.reviewed_today, 0);
+	assert.equal(payload.deck.total_cards, 2);
+	assert.equal(payload.deck.reviewed_today, 1);
+	assert.equal(payload.deck.today, "2026-04-26");
 	assert.deepEqual(
 		payload.cards.map((card) => card.id),
-		["beta2222"],
+		["alpha111", "beta2222"],
 	);
-	assert.equal(payload.cards[0].last_reviewed, "2026-04-25");
+	assert.equal(payload.cards[1].difficulty, 0);
+	assert.equal("paused" in payload.cards[1], false);
 });
 
-test("computes reviewed_today from the current session cards only", () => {
+test("updateCardDifficulty accepts 0 as the skip difficulty level", () => {
 	const model = parseModel(
 		[
-			"```yaml",
-			"filter_difficulty: [2, 4]",
-			"shuffle: no",
-			"```",
-			"",
 			"<!-- card -->",
 			"",
 			"```yaml",
 			"id: alpha111",
-			"difficulty: 2",
-			"last_reviewed: 2026-04-26",
-			"paused: no",
+			"difficulty: 3",
+			"last_reviewed: 2026-04-20",
 			"```",
 			"",
 			"## Front",
@@ -286,57 +91,43 @@ test("computes reviewed_today from the current session cards only", () => {
 			"",
 			"<!-- /card -->",
 			"",
+		].join("\n"),
+	);
+
+	const nextState = updateCardDifficulty(model, "alpha111", 0);
+
+	assert.equal(nextState.card.metadata.difficulty, 0);
+	assert.equal(nextState.model.cards[0].metadata.difficulty, 0);
+});
+
+test("markCardReviewed updates last_reviewed to the provided date", () => {
+	const model = parseModel(
+		[
 			"<!-- card -->",
 			"",
 			"```yaml",
-			"id: beta2222",
+			"id: alpha111",
 			"difficulty: 3",
-			"last_reviewed: 2026-04-26",
-			"paused: no",
-			"```",
-			"",
-			"## Front",
-			"",
-			"Beta",
-			"",
-			"## Back",
-			"",
-			"B",
-			"",
-			"<!-- /card -->",
-			"",
-			"<!-- card -->",
-			"",
-			"```yaml",
-			"id: delta444",
-			"difficulty: 4",
 			"last_reviewed: 2026-04-20",
-			"paused: no",
 			"```",
 			"",
 			"## Front",
 			"",
-			"Delta",
+			"Alpha",
 			"",
 			"## Back",
 			"",
-			"D",
+			"A",
 			"",
 			"<!-- /card -->",
 			"",
 		].join("\n"),
 	);
 
-	const session = createSessionState(model);
-	const payload = createSessionPayload(model, session, {
+	const nextState = markCardReviewed(model, "alpha111", {
 		now: () => new Date("2026-04-26T12:00:00.000Z"),
 	});
 
-	assert.equal(payload.session.total_cards, 2);
-	assert.equal(payload.session.exclude_reviewed_today, false);
-	assert.equal(payload.session.reviewed_today, 1);
-	assert.deepEqual(
-		payload.cards.map((card) => card.id),
-		["alpha111", "delta444"],
-	);
+	assert.equal(nextState.card.metadata.last_reviewed, "2026-04-26");
+	assert.equal(nextState.model.cards[0].metadata.last_reviewed, "2026-04-26");
 });

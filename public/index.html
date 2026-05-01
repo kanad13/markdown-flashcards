@@ -6,8 +6,12 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 	<title>Local Markdown Flashcards</title>
 	<link rel="stylesheet" href="/styles.css" />
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
 	<script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js" defer></script>
 	<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js" defer></script>
+	<script src="https://cdn.jsdelivr.net/npm/mermaid@11.6.0/dist/mermaid.min.js" defer></script>
+	<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" defer></script>
+	<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" defer></script>
 	<script src="/app.js" defer></script>
 </head>
 
@@ -39,33 +43,103 @@
 					</dl>
 				</div>
 				<button type="button" class="secondary-button shell-toggle" id="session-toggle-button" aria-pressed="false">Show
-					session info</button>
+					session settings</button>
 			</div>
 
 			<div class="session-shell-body is-hidden" id="session-shell-body">
-				<div class="detail-strip-group">
-					<p class="detail-strip-name">Session info</p>
-					<dl class="session-info-grid" id="session-info-strip">
-						<div class="meta-chip">
-							<dt>Order</dt>
-							<dd id="stack-mode">Loading…</dd>
+				<div class="session-settings-grid" id="session-settings-grid">
+					<article class="info-card setting-card" aria-labelledby="order-settings-title">
+						<div class="setting-card-copy">
+							<p class="detail-strip-name">Order</p>
+							<h2 id="order-settings-title">Card order</h2>
+							<p>Switch between file order and one stable shuffle instantly.</p>
 						</div>
-						<div class="meta-chip">
-							<dt>Filters</dt>
-							<dd id="session-filters">—</dd>
+						<div class="segmented-control" role="group" aria-label="Card order">
+							<button type="button" class="secondary-button segmented-toggle" id="order-file-button"
+								aria-pressed="false">File order</button>
+							<button type="button" class="secondary-button segmented-toggle" id="order-shuffle-button"
+								aria-pressed="true">Shuffle</button>
 						</div>
-						<div class="meta-chip">
-							<dt>Eligible</dt>
-							<dd id="eligible-count">—</dd>
+					</article>
+
+					<article class="info-card setting-card" aria-labelledby="review-visibility-title">
+						<div class="setting-card-copy">
+							<p class="detail-strip-name">Reviewed today</p>
+							<h2 id="review-visibility-title">Reviewed visibility</h2>
+							<p>Keep reviewed cards in view for a second pass, or hide them immediately.</p>
 						</div>
-						<div class="meta-chip">
-							<dt>Reviewed today</dt>
-							<dd id="reviewed-today">0</dd>
+						<div class="segmented-control" role="group" aria-label="Reviewed card visibility">
+							<button type="button" class="secondary-button segmented-toggle" id="reviewed-show-button"
+								aria-pressed="true">Show reviewed</button>
+							<button type="button" class="secondary-button segmented-toggle" id="reviewed-hide-button"
+								aria-pressed="false">Hide reviewed</button>
 						</div>
-					</dl>
+					</article>
+
+					<article class="info-card setting-card" aria-labelledby="difficulty-filter-title">
+						<div class="setting-card-copy">
+							<p class="detail-strip-name">Difficulties</p>
+							<h2 id="difficulty-filter-title">Visible difficulty levels</h2>
+							<p>Choose which levels stay in the live cycle. <strong>Skip (0)</strong> starts hidden but can return at
+								any time.</p>
+						</div>
+						<fieldset class="difficulty-filter-fieldset" id="difficulty-filter-group">
+							<legend class="sr-only">Visible difficulty levels</legend>
+							<label class="filter-chip" for="difficulty-filter-0">
+								<input type="checkbox" id="difficulty-filter-0" data-difficulty-filter value="0" />
+								<span>Skip (0)</span>
+							</label>
+							<label class="filter-chip" for="difficulty-filter-1">
+								<input type="checkbox" id="difficulty-filter-1" data-difficulty-filter value="1" />
+								<span>1</span>
+							</label>
+							<label class="filter-chip" for="difficulty-filter-2">
+								<input type="checkbox" id="difficulty-filter-2" data-difficulty-filter value="2" />
+								<span>2</span>
+							</label>
+							<label class="filter-chip" for="difficulty-filter-3">
+								<input type="checkbox" id="difficulty-filter-3" data-difficulty-filter value="3" />
+								<span>3</span>
+							</label>
+							<label class="filter-chip" for="difficulty-filter-4">
+								<input type="checkbox" id="difficulty-filter-4" data-difficulty-filter value="4" />
+								<span>4</span>
+							</label>
+							<label class="filter-chip" for="difficulty-filter-5">
+								<input type="checkbox" id="difficulty-filter-5" data-difficulty-filter value="5" />
+								<span>5</span>
+							</label>
+						</fieldset>
+					</article>
+
+					<article class="info-card setting-card setting-card-summary" aria-labelledby="live-summary-title">
+						<div class="setting-card-copy">
+							<p class="detail-strip-name">Live summary</p>
+							<h2 id="live-summary-title">Session snapshot</h2>
+							<p>Ready now follows your live filters. Reviewed and skipped totals cover the whole deck.</p>
+						</div>
+						<dl class="session-info-grid" id="session-info-strip">
+							<div class="meta-chip">
+								<dt>Ready now</dt>
+								<dd id="visible-count">—</dd>
+							</div>
+							<div class="meta-chip">
+								<dt>Total cards</dt>
+								<dd id="deck-count">—</dd>
+							</div>
+							<div class="meta-chip">
+								<dt>Reviewed today</dt>
+								<dd id="reviewed-today">0</dd>
+							</div>
+							<div class="meta-chip">
+								<dt>Skipped cards</dt>
+								<dd id="skipped-count">0</dd>
+							</div>
+						</dl>
+					</article>
 				</div>
 
-				<p class="status-line" id="status-message" aria-live="polite">Connecting to your study stack…</p>
+				<p class="status-line" id="status-message" aria-live="polite">Connecting to your study deck…</p>
 			</div>
 
 			<p class="error-banner is-hidden" id="error-message" role="alert"></p>
@@ -75,15 +149,17 @@
 			<div class="overview-hero">
 				<div class="overview-copy">
 					<p class="eyebrow">Guide / start page</p>
-					<h1 id="overview-title">Start with the flow</h1>
+					<h1 id="overview-title">Study with live controls</h1>
 					<p class="lede">
-						Read this once to understand what the top banner tells you, which controls matter during review, and which
-						<code>cards.md</code> settings shape the next session. Once the flow is clear, jump straight into the deck.
+						The session panel now owns order, reviewed visibility, and difficulty filters at runtime, so you can tighten
+						or loosen the deck without touching <code>cards.md</code>.
 					</p>
 					<ul class="guide-list">
-						<li>Use <strong>Show session info</strong> above for order, filters, eligible count, and reviewed-today count.</li>
-						<li>Changes to session settings in <code>cards.md</code> apply after restart.</li>
-						<li>Once that context makes sense, press <strong>Start studying</strong> and keep the guide one toggle away.</li>
+						<li>Open <strong>Show session settings</strong> for live order, reviewed-visibility, and multi-select
+							difficulty filters.</li>
+						<li>Use <strong>Skip (0)</strong> as the “park this card for later” difficulty level.</li>
+						<li>Difficulty and review changes save immediately back to <code>cards.md</code>, while the live filters
+							react instantly in the UI.</li>
 					</ul>
 					<button type="button" class="primary-button" id="start-study-button">Start studying</button>
 				</div>
@@ -106,7 +182,7 @@ Strict equality — it compares both value and type.
 				<article class="info-card guide-band">
 					<div class="guide-band-heading">
 						<h2>How to use it</h2>
-						<p>Keep the study flow simple and let the top banner carry the live context.</p>
+						<p>The top banner keeps the live context visible while the session settings stay one toggle away.</p>
 					</div>
 					<div class="guide-band-content">
 						<ul class="guide-list">
@@ -115,29 +191,31 @@ Strict equality — it compares both value and type.
 								session time.</li>
 							<li><strong>Reveal answer</strong> shows the back, and <strong>Hide answer</strong> conceals it again.
 							</li>
-							<li>Use <strong>←</strong> / <strong>→</strong> to move, <strong>1–5</strong> to rate difficulty,
+							<li>Use <strong>←</strong> / <strong>→</strong> to move, <strong>0–5</strong> to rate difficulty,
 								<strong>Space</strong> / <strong>Enter</strong> to reveal or hide, and <strong>R</strong> to toggle
 								reviewed status.
 							</li>
-							<li>Difficulty and review changes save immediately to <code>cards.md</code>.</li>
+							<li>When <strong>Hide reviewed</strong> is active, reviewed cards disappear from the cycle immediately
+								after you mark them.</li>
 						</ul>
 					</div>
 				</article>
 
 				<article class="info-card guide-band">
 					<div class="guide-band-heading">
-						<h2>Configure <code>cards.md</code></h2>
-						<p>These settings shape the next session stack after the next server start. Keep them small and explicit.</p>
+						<h2><code>cards.md</code> stays focused</h2>
+						<p>The file now stores card content and per-card metadata only; session settings live in the UI.</p>
 					</div>
 					<div class="guide-band-content">
 						<ul class="guide-list guide-settings-list">
-							<li><code>filter_difficulty: [1, 2, 3]</code> — include only the listed 1–5 difficulty values.</li>
-							<li><code>shuffle: yes</code> or <code>shuffle: no</code> — choose shuffled order or file order.</li>
-							<li><code>exclude_reviewed_today: true</code> — skip cards already reviewed when the session starts. It
-								defaults to <code>false</code>.</li>
-							<li>Cards reviewed during the current session stay in the active stack even when
-								<code>exclude_reviewed_today</code> is enabled.
+							<li>Each card still keeps app-managed metadata such as <code>id</code>, <code>difficulty</code>, and
+								<code>last_reviewed</code>.
 							</li>
+							<li><code>difficulty: 0</code> means the card is skipped until you include <strong>Skip (0)</strong> in
+								the live filter again.</li>
+							<li>Markdown, Mermaid diagrams, and KaTeX math render directly inside the card faces.</li>
+							<li>Legacy file-level settings are no longer needed; the app now derives the active session entirely from
+								the runtime controls.</li>
 						</ul>
 					</div>
 				</article>
@@ -167,10 +245,10 @@ Strict equality — it compares both value and type.
 					aria-label="Session position"></progress>
 
 				<div class="empty-state is-hidden" id="empty-state">
-					<h2>No cards in this session</h2>
+					<h2>No cards in this live view</h2>
 					<p>
-						The current <code>filter_difficulty</code> and <code>paused</code> settings left nothing to study.
-						Adjust <code>cards.md</code> and refresh when you are ready.
+						The current runtime settings hide every card. Re-enable one or more difficulty levels, show reviewed cards
+						again, or move skipped cards back above <code>0</code>.
 					</p>
 				</div>
 

@@ -25,12 +25,10 @@ function parseCardsFile(input) {
 	const hasTrailingNewline = /\r?\n$/.test(input);
 	const source = input.startsWith("\ufeff") ? input.slice(1) : input;
 	const lines = splitLines(source);
-	const frontmatterResult = parseFileFrontmatter(lines);
-	const cards = parseCards(lines, frontmatterResult.nextLineIndex);
+	const preambleResult = parseFilePreamble(lines);
+	const cards = parseCards(lines, preambleResult.nextLineIndex);
 
 	return {
-		frontmatter: frontmatterResult.data,
-		rawFrontmatterYaml: frontmatterResult.rawYaml,
 		hasTrailingNewline,
 		cards,
 	};
@@ -41,16 +39,15 @@ function serializeCardsFile(model) {
 		throw new TypeError("cards file model must be an object");
 	}
 
-	const frontmatter = asPlainObject(model.frontmatter, "frontmatter");
 	const cards = Array.isArray(model.cards) ? model.cards : [];
 	const output = [];
-
-	output.push(...renderYamlFence(frontmatter, model.rawFrontmatterYaml));
 
 	for (const [index, card] of cards.entries()) {
 		const normalizedCard = normalizeCardForSerialization(card, index);
 
-		output.push("");
+		if (output.length > 0) {
+			output.push("");
+		}
 		output.push(CARD_START);
 		output.push("");
 
@@ -75,31 +72,21 @@ function serializeCardsFile(model) {
 	return model.hasTrailingNewline === false ? serialized : `${serialized}\n`;
 }
 
-function parseFileFrontmatter(lines) {
-	if (lines.length === 0 || lines[0] !== YAML_FENCE_OPEN) {
-		throw createParseError(
-			"File-level frontmatter must be the first fenced yaml block at the top of cards.md.",
-			{
-				code: "INVALID_FILE_FRONTMATTER",
-				line: 1,
-			},
+function parseFilePreamble(lines) {
+	let cursor = skipBlankLines(lines, 0);
+
+	if (cursor < lines.length && lines[cursor] === YAML_FENCE_OPEN) {
+		const closingLineIndex = findClosingYamlFence(
+			lines,
+			cursor,
+			"legacy file-level settings",
 		);
+
+		cursor = skipBlankLines(lines, closingLineIndex + 1);
 	}
 
-	const closingLineIndex = findClosingYamlFence(
-		lines,
-		0,
-		"file-level frontmatter",
-	);
-	const rawYaml = lines.slice(1, closingLineIndex).join("\n");
-
 	return {
-		data: loadYamlMap(rawYaml, {
-			context: "file-level frontmatter",
-			line: 1,
-		}),
-		rawYaml,
-		nextLineIndex: skipBlankLines(lines, closingLineIndex + 1),
+		nextLineIndex: cursor,
 	};
 }
 

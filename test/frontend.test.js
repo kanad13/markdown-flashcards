@@ -4,11 +4,15 @@ const test = require("node:test");
 const {
 	APP_INFO,
 	DEFAULT_DIFFICULTY,
+	DEFAULT_VIEW_SETTINGS,
 	DIFFICULTY_VALUES,
+	MERMAID_CONFIG,
+	STUDY_DIFFICULTY_VALUES,
 	UI_LABELS,
 	applyCardUpdate,
-	canUndoReview,
+	applyViewSettings,
 	buildDifficultyOptions,
+	canUndoReview,
 	createInitialState,
 	formatCurrentCardLabel,
 	formatElapsedTimer,
@@ -20,21 +24,34 @@ const {
 	formatSessionFilterSummary,
 	formatSessionToggleLabel,
 	formatStackMode,
+	getCurrentCard,
 	getCurrentCardSummary,
+	getCurrentVisibleIndex,
 	getNextReviewMutation,
 	getReviewButtonState,
-	getCurrentCard,
-	getTodayKey,
 	getSessionProgress,
+	getTodayKey,
+	getVisibleCards,
+	getVisibleSessionSummary,
 	isCardReviewedToday,
 	moveIndex,
 	renderMarkdown,
 	resolveKeyboardShortcut,
-	setSessionBoxExpanded,
 	setOverviewVisibility,
+	setSessionBoxExpanded,
 } = require("../public/app.js");
 
-test("formatProgressText shows the persistent progress indicator format", () => {
+function createCard(id, difficulty, lastReviewed, front = "Q", back = "A") {
+	return {
+		id,
+		difficulty,
+		last_reviewed: lastReviewed,
+		front,
+		back,
+	};
+}
+
+test("formatProgressText shows the live progress indicator format", () => {
 	assert.equal(
 		formatProgressText({ total_cards: 7, reviewed_today: 3 }, 1),
 		"Card 2 of 7 · 3 reviewed today",
@@ -56,23 +73,12 @@ test("review summary helpers format readable review-date and timer metadata", ()
 	);
 	assert.equal(formatLastReviewedValue(), "Not yet");
 
-	const state = createInitialState({
-		session: {
-			card_ids: ["card-one"],
-			total_cards: 1,
-			reviewed_today: 0,
-			shuffle: "no",
+	const state = createInitialState(
+		{
+			cards: [createCard("card-one", 2, "2026-04-20", "Q1", "A1")],
 		},
-		cards: [
-			{
-				id: "card-one",
-				difficulty: 3,
-				last_reviewed: "2026-04-20",
-				front: "Q1",
-				back: "A1",
-			},
-		],
-	});
+		{ random: () => 0 },
+	);
 	state.sessionStartedAt = 0;
 	state.cardStartedAt = 1_000;
 
@@ -108,32 +114,309 @@ test("renderMarkdown renders markdown and sanitizes the resulting HTML before in
 	assert.equal(html, "<p>**hello**</p>");
 });
 
-test("formatStackMode returns friendly labels for file order and shuffled sessions", () => {
-	assert.equal(formatStackMode("yes"), "Shuffled session");
-	assert.equal(formatStackMode("no"), "File order");
+test("stack, filter, and toggle label helpers match the new live-session language", () => {
+	assert.equal(formatStackMode("shuffle"), "Shuffled view");
+	assert.equal(formatStackMode("file"), "File order");
 	assert.equal(APP_INFO.sourceFileLabel, "cards.md");
-});
-
-test("toggle label helpers match the current shell language", () => {
+	assert.equal(MERMAID_CONFIG.flowchart.htmlLabels, false);
 	assert.equal(UI_LABELS.guideToggle.show, "Show guide");
 	assert.equal(UI_LABELS.guideToggle.hide, "Hide guide");
-	assert.equal(UI_LABELS.sessionInfoToggle.show, "Show session info");
-	assert.equal(UI_LABELS.sessionInfoToggle.hide, "Hide session info");
+	assert.equal(UI_LABELS.sessionInfoToggle.show, "Show session settings");
+	assert.equal(UI_LABELS.sessionInfoToggle.hide, "Hide session settings");
 	assert.equal(formatGuideToggleLabel(false), "Show guide");
 	assert.equal(formatGuideToggleLabel(true), "Hide guide");
-	assert.equal(formatSessionToggleLabel(false), "Show session info");
-	assert.equal(formatSessionToggleLabel(true), "Hide session info");
+	assert.equal(formatSessionToggleLabel(false), "Show session settings");
+	assert.equal(formatSessionToggleLabel(true), "Hide session settings");
+	assert.equal(formatFilterLabel([1, 2, 3, 4, 5]), "Study cards");
+	assert.equal(formatFilterLabel([0, 1, 2, 3, 4, 5]), "All difficulty levels");
+	assert.equal(formatReviewedFilterLabel(true), null);
+	assert.equal(formatReviewedFilterLabel(false), "Hides reviewed today");
+	assert.equal(
+		formatSessionFilterSummary({
+			visibleDifficulties: [0, 1, 2, 3, 4, 5],
+			showReviewedToday: false,
+		}),
+		"All difficulty levels · Hides reviewed today",
+	);
 });
 
-test("formatCurrentCardLabel shows the persistent top-bar card summary", () => {
+test("createInitialState starts with live defaults and selects the first visible study card", () => {
+	const state = createInitialState(
+		{
+			cards: [
+				createCard("skipped-card", 0, "2026-04-25"),
+				createCard("study-card", 2, "2026-04-24"),
+			],
+		},
+		{ random: () => 0 },
+	);
+
+	assert.equal(state.currentCardId, "study-card");
+	assert.equal(state.isBackVisible, false);
+	assert.equal(state.isOverviewVisible, true);
+	assert.equal(state.isSessionBoxExpanded, false);
+	assert.equal(state.sessionStartedAt, null);
+	assert.equal(state.cardStartedAt, null);
+	assert.deepEqual(state.viewSettings, DEFAULT_VIEW_SETTINGS);
+	assert.deepEqual(
+		state.viewSettings.visibleDifficulties,
+		STUDY_DIFFICULTY_VALUES,
+	);
+	assert.equal(getCurrentCard(state).id, "study-card");
+	assert.deepEqual(
+		getVisibleCards(state).map((card) => card.id),
+		["study-card"],
+	);
+});
+
+test("buildDifficultyOptions includes Skip (0) plus the study levels", () => {
+	assert.deepEqual(
+		buildDifficultyOptions(3).map((option) => option.value),
+		DIFFICULTY_VALUES,
+	);
+	assert.equal(buildDifficultyOptions(0)[0].label, "Skip (0)");
+	assert.equal(buildDifficultyOptions(0)[0].selected, true);
+	assert.equal(buildDifficultyOptions(DEFAULT_DIFFICULTY)[3].selected, true);
+});
+
+test("applyViewSettings hides cards immediately and advances to the next matching card", () => {
+	let state = createInitialState(
+		{
+			cards: [
+				createCard("alpha", 2, "2026-04-20"),
+				createCard("beta", 3, "2026-04-21"),
+				createCard("gamma", 1, "2026-04-22"),
+			],
+		},
+		{ random: () => 0 },
+	);
+
+	state = applyViewSettings(state, { order: "file" }, { nowMs: 1000 });
+	assert.equal(state.currentCardId, "alpha");
+
+	state = applyViewSettings(
+		state,
+		{ visibleDifficulties: [1] },
+		{ nowMs: 2000, statusMessage: "Visible difficulties: 1." },
+	);
+
+	assert.equal(state.currentCardId, "gamma");
+	assert.equal(getCurrentVisibleIndex(state), 0);
+	assert.deepEqual(
+		getVisibleCards(state).map((card) => card.id),
+		["gamma"],
+	);
+	assert.equal(state.statusMessage, "Visible difficulties: 1.");
+});
+
+test("applyCardUpdate removes the current card from view when it becomes skipped", () => {
+	let state = createInitialState(
+		{
+			cards: [
+				createCard("alpha", 2, "2026-04-20"),
+				createCard("beta", 1, "2026-04-21"),
+			],
+		},
+		{ random: () => 0 },
+	);
+
+	state = applyViewSettings(state, { order: "file" }, { nowMs: 1000 });
+	assert.equal(state.currentCardId, "alpha");
+
+	const nextState = applyCardUpdate(
+		state,
+		{
+			card: createCard("alpha", 0, "2026-04-20"),
+		},
+		{ nowMs: 2000 },
+	);
+
+	assert.equal(nextState.currentCardId, "beta");
+	assert.deepEqual(
+		getVisibleCards(nextState).map((card) => card.id),
+		["beta"],
+	);
+});
+
+test("review helpers describe reviewed state and immediate hide behavior when reviewed cards are hidden", () => {
+	let state = createInitialState(
+		{
+			cards: [
+				createCard("alpha", 2, "2026-04-20"),
+				createCard("beta", 3, "2026-04-21"),
+			],
+		},
+		{ random: () => 0 },
+	);
+
+	state = applyViewSettings(
+		state,
+		{ order: "file", showReviewedToday: false },
+		{ nowMs: 1000 },
+	);
+	assert.deepEqual(getNextReviewMutation(state), { reviewed: true });
+	assert.equal(canUndoReview(state), false);
+	assert.deepEqual(getReviewButtonState(state, "2026-04-26"), {
+		label: "Mark as Reviewed",
+		title: "Mark as reviewed (R)",
+		disabled: false,
+		reviewed: false,
+		undoable: false,
+	});
+
+	const nextState = applyCardUpdate(
+		state,
+		{
+			card: createCard("alpha", 2, "2026-04-26"),
+		},
+		{ nowMs: 2000, todayKey: "2026-04-26" },
+	);
+
+	assert.equal(nextState.currentCardId, "beta");
+	assert.deepEqual(
+		getVisibleCards(nextState, "2026-04-26").map((card) => card.id),
+		["beta"],
+	);
+	assert.deepEqual(getVisibleSessionSummary(nextState, "2026-04-26"), {
+		total_cards: 1,
+		reviewed_today: 1,
+		deck_cards: 2,
+		skipped_cards: 0,
+	});
+});
+
+test("visible session summary reports ready-now, deck-level reviewed, and skipped counts", () => {
+	let state = createInitialState(
+		{
+			cards: [
+				createCard("alpha", 0, "2026-04-26"),
+				createCard("beta", 2, "2026-04-26"),
+				createCard("gamma", 4, "2026-04-20"),
+			],
+		},
+		{ random: () => 0 },
+	);
+
+	state = applyViewSettings(state, { order: "file" }, { nowMs: 1000 });
+
+	assert.deepEqual(getVisibleSessionSummary(state, "2026-04-26"), {
+		total_cards: 2,
+		reviewed_today: 2,
+		deck_cards: 3,
+		skipped_cards: 1,
+	});
+	assert.equal(
+		isCardReviewedToday(getVisibleCards(state, "2026-04-26")[0], "2026-04-26"),
+		true,
+	);
+});
+
+test("reviewed-today summary still increases when reviewed cards are hidden from the current view", () => {
+	let state = createInitialState(
+		{
+			cards: [
+				createCard("alpha", 2, "2026-04-20"),
+				createCard("beta", 4, "2026-04-20"),
+			],
+		},
+		{ random: () => 0 },
+	);
+
+	state = applyViewSettings(
+		state,
+		{ order: "file", showReviewedToday: false },
+		{ nowMs: 1000, todayKey: "2026-04-26" },
+	);
+
+	const nextState = applyCardUpdate(
+		state,
+		{
+			card: createCard("alpha", 2, "2026-04-26"),
+		},
+		{ nowMs: 2000, todayKey: "2026-04-26" },
+	);
+
+	assert.deepEqual(
+		getVisibleCards(nextState, "2026-04-26").map((card) => card.id),
+		["beta"],
+	);
+	assert.deepEqual(getVisibleSessionSummary(nextState, "2026-04-26"), {
+		total_cards: 1,
+		reviewed_today: 1,
+		deck_cards: 2,
+		skipped_cards: 0,
+	});
+});
+
+test("setSessionBoxExpanded and setOverviewVisibility keep the current card id intact", () => {
+	const state = createInitialState(
+		{
+			cards: [
+				createCard("card-one", 2, "2026-04-25"),
+				createCard("card-two", 4, "2026-04-20"),
+			],
+		},
+		{ random: () => 0 },
+	);
+	const expandedState = setSessionBoxExpanded(state, true);
+	assert.equal(expandedState.isSessionBoxExpanded, true);
+	assert.equal(expandedState.currentCardId, state.currentCardId);
+
+	const overviewState = setOverviewVisibility(expandedState, false);
+	assert.equal(overviewState.isOverviewVisible, false);
+	assert.equal(overviewState.currentCardId, state.currentCardId);
+	assert.equal(
+		overviewState.statusMessage,
+		"Study mode ready. Front content is shown by default.",
+	);
+});
+
+test("resolveKeyboardShortcut maps navigation, reveal/review, and 0-5 difficulty shortcuts while respecting focus", () => {
+	let state = createInitialState(
+		{
+			cards: [
+				createCard("alpha", 2, "2026-04-20"),
+				createCard("beta", 4, "2026-04-20"),
+			],
+		},
+		{ random: () => 0 },
+	);
+	state = applyViewSettings(state, { order: "file" }, { nowMs: 1000 });
+	state = setOverviewVisibility(state, false);
+	state.currentCardId = "alpha";
+	state.reviewUndoDates = { alpha: "2026-04-20" };
+
+	assert.deepEqual(resolveKeyboardShortcut({ key: "0" }, state), {
+		type: "difficulty",
+		value: 0,
+	});
+	assert.deepEqual(resolveKeyboardShortcut({ key: "ArrowRight" }, state), {
+		type: "next",
+	});
+	assert.deepEqual(resolveKeyboardShortcut({ key: "r" }, state), {
+		type: "reviewToggle",
+	});
+	assert.deepEqual(resolveKeyboardShortcut({ key: " " }, state), {
+		type: "toggleReveal",
+	});
+	assert.equal(
+		resolveKeyboardShortcut(
+			{
+				key: "1",
+				target: { tagName: "INPUT" },
+			},
+			state,
+		),
+		null,
+	);
+});
+
+test("current card labels and session progress helpers stay consistent", () => {
 	assert.equal(formatCurrentCardLabel({ total_cards: 7 }, 1), "2 of 7");
 	assert.equal(
 		formatCurrentCardLabel({ total_cards: 0 }, -1, "Loading…"),
 		"Loading…",
 	);
-});
-
-test("getSessionProgress exposes the current card position for the toolbar progress bar", () => {
 	assert.deepEqual(getSessionProgress({ total_cards: 7 }, 1), {
 		max: 7,
 		value: 2,
@@ -142,382 +425,7 @@ test("getSessionProgress exposes the current card position for the toolbar progr
 		max: 1,
 		value: 0,
 	});
-});
-
-test("createInitialState starts with the overview open, first card selected, and the back hidden", () => {
-	const state = createInitialState({
-		session: {
-			card_ids: ["card-one", "card-two"],
-			exclude_reviewed_today: true,
-			total_cards: 2,
-			reviewed_today: 1,
-			shuffle: "no",
-			filter_difficulty: [1, 2],
-		},
-		cards: [
-			{
-				id: "card-one",
-				difficulty: 2,
-				last_reviewed: "2026-04-25",
-				front: "Q1",
-				back: "A1",
-			},
-			{
-				id: "card-two",
-				difficulty: 4,
-				last_reviewed: "2026-04-20",
-				front: "Q2",
-				back: "A2",
-			},
-		],
-	});
-
-	assert.equal(state.currentIndex, 0);
-	assert.equal(state.isBackVisible, false);
-	assert.equal(state.isOverviewVisible, true);
-	assert.equal(state.isSessionBoxExpanded, false);
-	assert.equal(state.sessionStartedAt, null);
-	assert.equal(state.cardStartedAt, null);
-	assert.equal(state.session.exclude_reviewed_today, true);
-	assert.equal(getCurrentCard(state).id, "card-one");
-	assert.equal(formatFilterLabel(state.session.filter_difficulty), "1, 2");
-	assert.equal(
-		formatSessionFilterSummary(state.session),
-		"1, 2 · Skips cards already reviewed today",
-	);
-});
-
-test("review filter helpers describe whether reviewed-today cards are included in the session", () => {
-	assert.equal(formatReviewedFilterLabel(false), null);
-	assert.equal(
-		formatReviewedFilterLabel(true),
-		"Skips cards already reviewed today",
-	);
-	assert.equal(
-		formatSessionFilterSummary({
-			filter_difficulty: null,
-			exclude_reviewed_today: false,
-		}),
-		"All difficulties",
-	);
-	assert.equal(
-		formatSessionFilterSummary({
-			filter_difficulty: [1, 2, 3, 4, 5],
-			exclude_reviewed_today: true,
-		}),
-		"All difficulties · Skips cards already reviewed today",
-	);
-});
-
-test("setSessionBoxExpanded toggles the unified session box without changing card state", () => {
-	const state = createInitialState({
-		session: {
-			card_ids: ["card-one", "card-two"],
-			total_cards: 2,
-			reviewed_today: 1,
-			shuffle: "yes",
-			filter_difficulty: null,
-		},
-		cards: [
-			{
-				id: "card-one",
-				difficulty: 2,
-				last_reviewed: "2026-04-25",
-				front: "Q1",
-				back: "A1",
-			},
-			{
-				id: "card-two",
-				difficulty: 4,
-				last_reviewed: "2026-04-20",
-				front: "Q2",
-				back: "A2",
-			},
-		],
-	});
-	state.currentIndex = 1;
-
-	const expandedState = setSessionBoxExpanded(state, true);
-	assert.equal(expandedState.isSessionBoxExpanded, true);
-	assert.equal(expandedState.currentIndex, 1);
-	assert.equal(getCurrentCard(expandedState).id, "card-two");
-
-	const collapsedState = setSessionBoxExpanded(expandedState, false);
-	assert.equal(collapsedState.isSessionBoxExpanded, false);
-	assert.equal(collapsedState.currentIndex, 1);
-});
-
-test("setOverviewVisibility toggles between overview and study mode without losing the current card", () => {
-	const state = createInitialState({
-		session: {
-			card_ids: ["card-one", "card-two"],
-			total_cards: 2,
-			reviewed_today: 1,
-			shuffle: "yes",
-			filter_difficulty: null,
-		},
-		cards: [
-			{
-				id: "card-one",
-				difficulty: 2,
-				last_reviewed: "2026-04-25",
-				front: "Q1",
-				back: "A1",
-			},
-			{
-				id: "card-two",
-				difficulty: 4,
-				last_reviewed: "2026-04-20",
-				front: "Q2",
-				back: "A2",
-			},
-		],
-	});
-	state.currentIndex = 1;
-
-	const studyModeState = setOverviewVisibility(state, false);
-	assert.equal(studyModeState.isOverviewVisible, false);
-	assert.equal(studyModeState.currentIndex, 1);
-	assert.equal(
-		studyModeState.statusMessage,
-		"Study mode ready. Front content is shown by default.",
-	);
-
-	const overviewState = setOverviewVisibility(studyModeState, true);
-	assert.equal(overviewState.isOverviewVisible, true);
-	assert.equal(overviewState.currentIndex, 1);
-	assert.equal(
-		overviewState.statusMessage,
-		"Guide open. Your current card is preserved.",
-	);
-});
-
-test("buildDifficultyOptions returns the 1–5 dropdown options with the selected value", () => {
-	const options = buildDifficultyOptions(4);
-
-	assert.deepEqual(DIFFICULTY_VALUES, [1, 2, 3, 4, 5]);
-	assert.equal(DEFAULT_DIFFICULTY, 3);
-	assert.equal(options.length, 5);
-	assert.equal(options[0].value, 1);
-	assert.equal(options[4].value, 5);
-	assert.deepEqual(
-		options.map((option) => option.label),
-		["1", "2", "3", "4", "5"],
-	);
-	assert.equal(options.filter((option) => option.selected).length, 1);
-	assert.equal(options.find((option) => option.selected).value, 4);
-});
-
-test("review helpers describe reviewed state and current-session undo availability", () => {
-	const baseState = createInitialState({
-		session: {
-			card_ids: ["card-one"],
-			total_cards: 1,
-			reviewed_today: 0,
-			shuffle: "no",
-		},
-		cards: [
-			{
-				id: "card-one",
-				difficulty: 3,
-				last_reviewed: "2026-04-20",
-				front: "Q1",
-				back: "A1",
-			},
-		],
-	});
-	baseState.isOverviewVisible = false;
-
-	assert.equal(
-		isCardReviewedToday(getCurrentCard(baseState), "2026-04-26"),
-		false,
-	);
-	assert.equal(canUndoReview(baseState), false);
-	assert.deepEqual(getNextReviewMutation(baseState, "2026-04-26"), {
-		reviewed: true,
-	});
-	assert.deepEqual(getReviewButtonState(baseState, "2026-04-26"), {
-		label: "Mark as Reviewed",
-		title: "Mark as reviewed (R)",
-		disabled: false,
-		reviewed: false,
-		undoable: false,
-	});
-
-	const reviewedState = {
-		...baseState,
-		cards: [
-			{
-				...baseState.cards[0],
-				last_reviewed: "2026-04-26",
-			},
-		],
-		reviewUndoDates: {
-			"card-one": "2026-04-20",
-		},
-	};
-
-	assert.equal(
-		isCardReviewedToday(getCurrentCard(reviewedState), "2026-04-26"),
-		true,
-	);
-	assert.equal(canUndoReview(reviewedState), true);
-	assert.deepEqual(getNextReviewMutation(reviewedState, "2026-04-26"), {
-		reviewed: false,
-		restoreLastReviewed: "2026-04-20",
-	});
-	assert.deepEqual(getReviewButtonState(reviewedState, "2026-04-26"), {
-		label: "Reviewed today",
-		title: "Unmark reviewed (R)",
-		disabled: false,
-		reviewed: true,
-		undoable: true,
-	});
-});
-
-test("resolveKeyboardShortcut maps navigation, reveal/review, and difficulty shortcuts while respecting focus", () => {
-	const baseState = createInitialState({
-		session: {
-			card_ids: ["card-one", "card-two"],
-			total_cards: 2,
-			reviewed_today: 0,
-			shuffle: "no",
-		},
-		cards: [
-			{
-				id: "card-one",
-				difficulty: 2,
-				last_reviewed: "2026-04-20",
-				front: "Q1",
-				back: "A1",
-			},
-			{
-				id: "card-two",
-				difficulty: 4,
-				last_reviewed: "2026-04-20",
-				front: "Q2",
-				back: "A2",
-			},
-		],
-	});
-	baseState.isOverviewVisible = false;
-
-	assert.deepEqual(
-		resolveKeyboardShortcut({ key: "ArrowRight", target: {} }, baseState),
-		{ type: "next" },
-	);
-	assert.deepEqual(
-		resolveKeyboardShortcut({ key: "1", target: {} }, baseState),
-		{ type: "difficulty", value: 1 },
-	);
-	assert.deepEqual(
-		resolveKeyboardShortcut({ key: "Enter", target: {} }, baseState),
-		{ type: "toggleReveal" },
-	);
-	assert.deepEqual(
-		resolveKeyboardShortcut(
-			{ code: "Space", key: " ", target: {} },
-			{ ...baseState, isBackVisible: true },
-		),
-		{ type: "toggleReveal" },
-	);
-	assert.deepEqual(
-		resolveKeyboardShortcut({ key: "r", target: {} }, baseState),
-		{ type: "reviewToggle" },
-	);
-	assert.equal(
-		resolveKeyboardShortcut(
-			{ key: "1", target: { tagName: "INPUT" } },
-			baseState,
-		),
-		null,
-	);
-	assert.equal(
-		resolveKeyboardShortcut(
-			{ key: "Enter", target: { tagName: "BUTTON" } },
-			baseState,
-		),
-		null,
-	);
-	assert.equal(
-		resolveKeyboardShortcut(
-			{ key: "ArrowLeft", metaKey: true, target: {} },
-			baseState,
-		),
-		null,
-	);
-	assert.equal(
-		resolveKeyboardShortcut(
-			{ key: "r", target: {} },
-			{
-				...baseState,
-				cards: [
-					{
-						...baseState.cards[0],
-						last_reviewed: getTodayKey(),
-					},
-					baseState.cards[1],
-				],
-			},
-		),
-		null,
-	);
-});
-
-test("moveIndex clamps previous and next navigation within the session bounds", () => {
-	assert.equal(moveIndex(0, -1, 3), 0);
-	assert.equal(moveIndex(1, 1, 3), 2);
-	assert.equal(moveIndex(2, 1, 3), 2);
-	assert.equal(moveIndex(-1, 1, 0), -1);
-});
-
-test("applyCardUpdate merges API responses without changing the current position", () => {
-	const state = createInitialState({
-		session: {
-			card_ids: ["card-one", "card-two"],
-			total_cards: 2,
-			reviewed_today: 0,
-			shuffle: "no",
-		},
-		cards: [
-			{
-				id: "card-one",
-				difficulty: 2,
-				last_reviewed: "2026-04-20",
-				front: "Q1",
-				back: "A1",
-			},
-			{
-				id: "card-two",
-				difficulty: 4,
-				last_reviewed: "2026-04-20",
-				front: "Q2",
-				back: "A2",
-			},
-		],
-	});
-	state.currentIndex = 1;
-	state.isOverviewVisible = false;
-
-	const nextState = applyCardUpdate(state, {
-		card: {
-			id: "card-two",
-			difficulty: 5,
-			last_reviewed: "2026-04-26",
-			front: "Q2",
-			back: "A2",
-		},
-		session: {
-			card_ids: ["card-one", "card-two"],
-			total_cards: 2,
-			reviewed_today: 1,
-			shuffle: "no",
-		},
-	});
-
-	assert.equal(nextState.currentIndex, 1);
-	assert.equal(nextState.isOverviewVisible, false);
-	assert.equal(nextState.cards[1].difficulty, 5);
-	assert.equal(nextState.cards[1].last_reviewed, "2026-04-26");
-	assert.equal(nextState.session.reviewed_today, 1);
+	assert.equal(getTodayKey(new Date("2026-04-26T12:00:00.000Z")), "2026-04-26");
+	assert.equal(moveIndex(1, 1, 4), 2);
+	assert.equal(moveIndex(0, -1, 4), 0);
 });
